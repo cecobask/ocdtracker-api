@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/cecobask/ocd-tracker-api/internal/log"
 	"github.com/jackc/pgx/v4"
-	"log"
+	"go.uber.org/zap"
+
 	"os"
 	"time"
 )
@@ -31,6 +33,7 @@ type ConnectionConfig struct {
 
 // ConnectWithConfig connects to a postgres database with the specified configuration
 func ConnectWithConfig(ctx context.Context, credentials Credentials, connectionConfig ConnectionConfig) (*Database, error) {
+	logger := log.LoggerFromContext(ctx)
 	connString := fmt.Sprintf("host=postgres port=%s user=%s password=%s dbname=%s sslmode=disable",
 		connectionConfig.Port, credentials.User, credentials.Password, connectionConfig.DBName,
 	)
@@ -38,15 +41,15 @@ func ConnectWithConfig(ctx context.Context, credentials Credentials, connectionC
 	for {
 		attempts++
 		if attempts == connectionConfig.RetryMaxAttempts {
-			return nil, errors.New("postgres connection max retries attempts reached")
+			return nil, errors.New("reached max postgres connection retry attempts")
 		}
 		postgresConn, err := pgx.Connect(ctx, connString)
 		if err != nil {
-			fmt.Printf("could not connect to postgres: attempts=%d, error=%v\n", attempts, err)
+			logger.Debug("failed attempt to establish postgres connection", zap.Int("attempts", attempts), zap.Error(err))
 			time.Sleep(connectionConfig.RetryDelay)
 			continue
 		}
-		log.Println("postgres connection established")
+		logger.Info("established postgres connection")
 		return &Database{
 			Connection: postgresConn,
 		}, nil

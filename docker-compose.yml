@@ -8,7 +8,7 @@ services:
     ports:
       - "${POSTGRES_PORT}:${POSTGRES_PORT}"
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - ./pg_data:/var/lib/postgresql/data
   migrate:
     image: migrate/migrate
     restart: on-failure:10
@@ -17,7 +17,7 @@ services:
     depends_on:
       - postgres
     volumes:
-      - ./db/postgres/migrations:/migrations
+      - ./internal/db/postgres/migrations:/migrations
     command:
       [
         "-path",
@@ -36,6 +36,8 @@ services:
     depends_on:
       - postgres
       - migrate
+    volumes:
+      - ${SERVICE_ACCOUNT_FILE}:/tmp/keys/serviceAccountKey.json:ro
     ports:
       - "${SERVER_PORT}:${SERVER_PORT}"
 volumes:

@@ -1,2 +1,4 @@
 .idea/
 .env
+serviceAccountKey.json
+pg_data/
