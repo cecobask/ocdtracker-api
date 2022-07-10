@@ -2,7 +2,7 @@ version: "3.8"
 services:
   postgres:
     image: postgres
-    restart: on-failure:10
+    restart: on-failure
     env_file:
       - .env
     ports:
@@ -11,23 +11,23 @@ services:
       - ./pg_data:/var/lib/postgresql/data
   migrate:
     image: migrate/migrate
-    restart: on-failure:10
+    restart: on-failure
     env_file:
       - .env
     depends_on:
       - postgres
     volumes:
-      - ./internal/db/postgres/migrations:/migrations
+      - ./internal/db/postgres/migration:/migration
     command:
       [
         "-path",
-        "/migrations",
+        "/migration",
         "-database",
         "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable",
         "up"
       ]
   api:
-    restart: on-failure:10
+    restart: on-failure
     build:
       context: .
       dockerfile: Dockerfile

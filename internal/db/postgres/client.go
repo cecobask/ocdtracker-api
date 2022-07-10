@@ -12,18 +12,15 @@ import (
 	"time"
 )
 
-// Database ...
-type Database struct {
+type Client struct {
 	Connection *pgx.Conn
 }
 
-// Credentials ...
 type Credentials struct {
 	User     string
 	Password string
 }
 
-// ConnectionConfig ...
 type ConnectionConfig struct {
 	DBName           string
 	Port             string
@@ -31,8 +28,8 @@ type ConnectionConfig struct {
 	RetryDelay       time.Duration
 }
 
-// ConnectWithConfig connects to a postgres database with the specified configuration
-func ConnectWithConfig(ctx context.Context, credentials Credentials, connectionConfig ConnectionConfig) (*Database, error) {
+// ConnectWithConfig connects to a postgres database with custom config
+func ConnectWithConfig(ctx context.Context, credentials Credentials, connectionConfig ConnectionConfig) (*Client, error) {
 	logger := log.LoggerFromContext(ctx)
 	connString := fmt.Sprintf("host=postgres port=%s user=%s password=%s dbname=%s sslmode=disable",
 		connectionConfig.Port, credentials.User, credentials.Password, connectionConfig.DBName,
@@ -50,14 +47,14 @@ func ConnectWithConfig(ctx context.Context, credentials Credentials, connectionC
 			continue
 		}
 		logger.Info("established postgres connection")
-		return &Database{
+		return &Client{
 			Connection: postgresConn,
 		}, nil
 	}
 }
 
-// Connect connects to a postgres database
-func Connect(ctx context.Context) (*Database, error) {
+// Connect connects to a postgres database with default config
+func Connect(ctx context.Context) (*Client, error) {
 	credentials := Credentials{
 		User:     os.Getenv("POSTGRES_USER"),
 		Password: os.Getenv("POSTGRES_PASSWORD"),

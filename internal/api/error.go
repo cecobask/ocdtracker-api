@@ -1,4 +1,4 @@
-package httperr
+package api
 
 import (
 	"github.com/cecobask/ocd-tracker-api/internal/log"
@@ -7,8 +7,16 @@ import (
 	"net/http"
 )
 
-func Unauthorised(w http.ResponseWriter, r *http.Request, slug string, err error) {
+func UnauthorisedError(w http.ResponseWriter, r *http.Request, slug string, err error) {
 	httpRespondWithError(w, r, slug, err, "unauthorised", http.StatusUnauthorized)
+}
+
+func NotFoundError(w http.ResponseWriter, r *http.Request, slug string, err error) {
+	httpRespondWithError(w, r, slug, err, "not-found", http.StatusNotFound)
+}
+
+func InternalServerError(w http.ResponseWriter, r *http.Request, slug string, err error) {
+	httpRespondWithError(w, r, slug, err, "internal-server-error", http.StatusInternalServerError)
 }
 
 func httpRespondWithError(w http.ResponseWriter, r *http.Request, slug string, err error, message string, status int) {

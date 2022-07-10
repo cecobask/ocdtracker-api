@@ -3,6 +3,8 @@ package log
 import (
 	"context"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"time"
 )
 
 type ctxKey int
@@ -19,7 +21,9 @@ func LoggerFromContext(ctx context.Context) *zap.Logger {
 	if logger, ok := ctx.Value(ctxKeyLogger).(*zap.Logger); ok {
 		return logger
 	}
-	logger, err := zap.NewProduction()
+	config := zap.NewProductionConfig()
+	config.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(time.RFC3339)
+	logger, err := config.Build()
 	if err != nil {
 		panic(err)
 	}
