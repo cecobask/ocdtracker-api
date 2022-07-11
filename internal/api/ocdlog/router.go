@@ -8,16 +8,15 @@ import (
 )
 
 // NewRouter creates all routes associated with OCD logs
-func NewRouter(ctx context.Context, chiRouter *chi.Mux, pg *postgres.Client) http.Handler {
+func NewRouter(ctx context.Context, pg *postgres.Client) http.Handler {
 	h := NewHandler(ctx, pg)
-	chiRouter.Route("/ocdlog", func(rootRouter chi.Router) {
-		rootRouter.Get("/", h.GetAllLogs)
-		rootRouter.Delete("/", h.DeleteAllLogs)
-		rootRouter.Route("/{log-id}", func(logRouter chi.Router) {
-			logRouter.Get("/", h.GetLog)
-			logRouter.Put("/", h.CreateOrUpdateLog)
-			logRouter.Delete("/", h.DeleteLog)
-		})
+	r := chi.NewRouter()
+	r.Get("/", h.GetAllLogs)
+	r.Delete("/", h.DeleteAllLogs)
+	r.Route("/{log-id}", func(r chi.Router) {
+		r.Get("/", h.GetLog)
+		r.Put("/", h.CreateOrUpdateLog)
+		r.Delete("/", h.DeleteLog)
 	})
-	return chiRouter
+	return r
 }

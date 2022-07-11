@@ -29,8 +29,9 @@ func main() {
 
 	chiRouter := chi.NewRouter()
 	chiRouter.Use(chiMiddleware.Recoverer)
+	addLoggerMiddleware(ctx, chiRouter)
 	addAuthMiddleware(ctx, chiRouter)
-	ocdlog.NewRouter(ctx, chiRouter, pg)
+	chiRouter.Mount("/ocdlog", ocdlog.NewRouter(ctx, pg))
 	server := &http.Server{
 		Addr:    fmt.Sprintf("0.0.0.0:%s", os.Getenv("SERVER_PORT")),
 		Handler: chiRouter,
@@ -40,6 +41,12 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to start http server", zap.Error(err))
 	}
+}
+
+func addLoggerMiddleware(ctx context.Context, chiRouter *chi.Mux) {
+	logger := middleware.Logger{Context: ctx}
+	chiRouter.Use(logger.Middleware)
+	log.LoggerFromContext(ctx).Info("added logger middleware to the router")
 }
 
 func addAuthMiddleware(ctx context.Context, chiRouter *chi.Mux) {
@@ -53,6 +60,10 @@ func addAuthMiddleware(ctx context.Context, chiRouter *chi.Mux) {
 	if err != nil {
 		logger.Fatal("unable to create firebase auth client", zap.Error(err))
 	}
-	chiRouter.Use(middleware.FirebaseHttpMiddleware{AuthClient: authClient}.Middleware)
+	firebaseAuth := middleware.Auth{
+		Context:    ctx,
+		AuthClient: authClient,
+	}
+	chiRouter.Use(firebaseAuth.Middleware)
 	logger.Info("added firebase auth middleware to the router")
 }
