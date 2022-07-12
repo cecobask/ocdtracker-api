@@ -7,10 +7,8 @@ import (
 	"time"
 )
 
-type ctxKey int
-
 const (
-	ctxKeyLogger ctxKey = iota
+	ctxKeyLogger string = "ctxKeyLogger"
 )
 
 func ContextWithLogger(ctx context.Context, logger *zap.Logger) context.Context {

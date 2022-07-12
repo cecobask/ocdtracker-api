@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	firebase "firebase.google.com/go/v4"
 	"fmt"
 	"github.com/cecobask/ocd-tracker-api/internal/api/middleware"
 	"github.com/cecobask/ocd-tracker-api/internal/api/ocdlog"
@@ -28,12 +27,15 @@ func main() {
 	defer pg.Connection.Close(context.Background())
 
 	chiRouter := chi.NewRouter()
-	chiRouter.Use(chiMiddleware.Recoverer)
-	addLoggerMiddleware(ctx, chiRouter)
-	addAuthMiddleware(ctx, chiRouter)
+	chiRouter.Use(
+		chiMiddleware.Recoverer,
+		middleware.NewLoggerMiddleware(ctx).Handle,
+		middleware.NewAuthMiddleware(ctx).Handle,
+		middleware.NewPaginationMiddleware(ctx).Handle,
+	)
 	chiRouter.Mount("/ocdlog", ocdlog.NewRouter(ctx, pg))
-	server := &http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%s", os.Getenv("SERVER_PORT")),
+	server := http.Server{
+		Addr:    fmt.Sprintf(":%s", os.Getenv("SERVER_PORT")),
 		Handler: chiRouter,
 	}
 	logger.Info("starting http server", zap.String("url", server.Addr))
@@ -41,29 +43,4 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to start http server", zap.Error(err))
 	}
-}
-
-func addLoggerMiddleware(ctx context.Context, chiRouter *chi.Mux) {
-	logger := middleware.Logger{Context: ctx}
-	chiRouter.Use(logger.Middleware)
-	log.LoggerFromContext(ctx).Info("added logger middleware to the router")
-}
-
-func addAuthMiddleware(ctx context.Context, chiRouter *chi.Mux) {
-	logger := log.LoggerFromContext(ctx)
-	config := &firebase.Config{ProjectID: os.Getenv("FIREBASE_PROJECT_ID")}
-	firebaseApp, err := firebase.NewApp(ctx, config)
-	if err != nil {
-		logger.Fatal("error initializing firebase app", zap.Error(err))
-	}
-	authClient, err := firebaseApp.Auth(ctx)
-	if err != nil {
-		logger.Fatal("unable to create firebase auth client", zap.Error(err))
-	}
-	firebaseAuth := middleware.Auth{
-		Context:    ctx,
-		AuthClient: authClient,
-	}
-	chiRouter.Use(firebaseAuth.Middleware)
-	logger.Info("added firebase auth middleware to the router")
 }
