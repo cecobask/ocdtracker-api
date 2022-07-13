@@ -19,21 +19,18 @@ func InternalServerError(w http.ResponseWriter, r *http.Request, slug string, er
 	httpRespondWithError(w, r, slug, err, "internal-server-error", http.StatusInternalServerError)
 }
 
+func BadRequestError(w http.ResponseWriter, r *http.Request, slug string, err error) {
+	httpRespondWithError(w, r, slug, err, "bad-request", http.StatusBadRequest)
+}
+
 func httpRespondWithError(w http.ResponseWriter, r *http.Request, slug string, err error, message string, status int) {
 	logger := log.LoggerFromContext(r.Context())
 	logger.Warn(message, zap.String("error-slug", slug), zap.Int("status", status), zap.Error(err))
-	resp := ErrorResponse{slug, status}
-	if err := render.Render(w, r, resp); err != nil {
-		panic(err)
-	}
+	resp := ErrorResponse{slug}
+	render.Status(r, status)
+	render.JSON(w, r, resp)
 }
 
 type ErrorResponse struct {
-	Slug       string `json:"slug"`
-	httpStatus int
-}
-
-func (e ErrorResponse) Render(w http.ResponseWriter, _ *http.Request) error {
-	w.WriteHeader(e.httpStatus)
-	return nil
+	Slug string `json:"slug"`
 }

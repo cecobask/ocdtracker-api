@@ -15,8 +15,10 @@ type paginationMiddleware struct {
 }
 
 type PaginationDetails struct {
-	limit  int
-	offset int
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+	Count  int `json:"count"`
+	Total  int `json:"total"`
 }
 
 func NewPaginationMiddleware(ctx context.Context) *paginationMiddleware {
@@ -27,24 +29,21 @@ func NewPaginationMiddleware(ctx context.Context) *paginationMiddleware {
 
 func (p paginationMiddleware) Handle(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
-		var paginationDetails *PaginationDetails
 		limitParam := r.URL.Query().Get("limit")
 		offsetParam := r.URL.Query().Get("offset")
-		if limitParam != "" || offsetParam != "" {
-			limit, err := strconv.Atoi(limitParam)
-			if err != nil {
-				limit = 50
-			}
-			offset, err := strconv.Atoi(offsetParam)
-			if err != nil {
-				offset = 0
-			}
-			paginationDetails = &PaginationDetails{
-				limit:  limit,
-				offset: offset,
-			}
+		limit, err := strconv.Atoi(limitParam)
+		if err != nil {
+			limit = 50
 		}
-		ctx := context.WithValue(r.Context(), ctxKeyPagination, paginationDetails)
+		offset, err := strconv.Atoi(offsetParam)
+		if err != nil {
+			offset = 0
+		}
+		paginationDetails := PaginationDetails{
+			Limit:  limit,
+			Offset: offset,
+		}
+		ctx := context.WithValue(r.Context(), ctxKeyPagination, &paginationDetails)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
 	return http.HandlerFunc(fn)

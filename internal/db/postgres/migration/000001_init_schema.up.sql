@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS ocdlog(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id VARCHAR(128) REFERENCES account(id) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP,
     ruminate_duration INTERVAL DEFAULT '0 minutes',
     anxiety_level INTEGER DEFAULT 0,
     notes TEXT,

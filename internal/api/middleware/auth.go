@@ -61,7 +61,9 @@ func (a *authMiddleware) Handle(next http.Handler) http.Handler {
 			api.NotFoundError(w, r, "unable-to-find-user", err)
 			return
 		}
-		r = r.WithContext(context.WithValue(r.Context(), ctxKeyUser, user))
+		// add user to the request context and as field to the logger
+		logger := log.LoggerFromContext(r.Context()).With(zap.String("user", user.UID))
+		r = r.WithContext(ContextWithUser(log.ContextWithLogger(r.Context(), logger), user))
 		next.ServeHTTP(w, r)
 	}
 	return http.HandlerFunc(handlerFn)
@@ -73,6 +75,10 @@ func tokenFromHeader(r *http.Request) string {
 		return headerValue[7:]
 	}
 	return ""
+}
+
+func ContextWithUser(ctx context.Context, user *firebaseAuth.UserRecord) context.Context {
+	return context.WithValue(ctx, ctxKeyUser, user)
 }
 
 func UserFromContext(ctx context.Context) (*firebaseAuth.UserRecord, error) {

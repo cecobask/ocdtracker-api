@@ -10,24 +10,25 @@ import (
 	"time"
 )
 
-type loggerMiddleware struct {
+type requestLoggerMiddleware struct {
 	ctx context.Context
 }
 
-func NewLoggerMiddleware(ctx context.Context) *loggerMiddleware {
-	return &loggerMiddleware{
+func NewRequestLoggerMiddleware(ctx context.Context) *requestLoggerMiddleware {
+	return &requestLoggerMiddleware{
 		ctx: ctx,
 	}
 }
 
-func (l *loggerMiddleware) Handle(next http.Handler) http.Handler {
+func (rlm *requestLoggerMiddleware) Handle(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		requestTime := time.Now()
+		logger := log.LoggerFromContext(r.Context()).With(zap.String("request_id", uuid.New().String()))
+		r = r.WithContext(log.ContextWithLogger(r.Context(), logger))
 		wrw := chiMiddleware.NewWrapResponseWriter(w, r.ProtoMajor)
 		defer func() {
-			log.LoggerFromContext(l.ctx).Info(
+			logger.Info(
 				"request info",
-				zap.String("id", uuid.New().String()),
 				zap.String("method", r.Method),
 				zap.String("url", r.URL.String()),
 				zap.Int("status", wrw.Status()),

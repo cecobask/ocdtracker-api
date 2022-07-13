@@ -16,10 +16,8 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
-	logger := log.LoggerFromContext(ctx)
-	ctx = log.ContextWithLogger(ctx, logger)
-
+	logger := log.NewLogger()
+	ctx := log.ContextWithLogger(context.Background(), logger)
 	pg, err := postgres.Connect(ctx)
 	if err != nil {
 		logger.Fatal("failed to connect postgres", zap.Error(err))
@@ -29,7 +27,7 @@ func main() {
 	chiRouter := chi.NewRouter()
 	chiRouter.Use(
 		chiMiddleware.Recoverer,
-		middleware.NewLoggerMiddleware(ctx).Handle,
+		middleware.NewRequestLoggerMiddleware(ctx).Handle,
 		middleware.NewAuthMiddleware(ctx).Handle,
 		middleware.NewPaginationMiddleware(ctx).Handle,
 	)
