@@ -1,5 +1,5 @@
 start:
-	docker-compose up --build --detach
+	docker-compose up --build
 
 restart: cleanup start
 
