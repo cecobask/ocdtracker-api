@@ -11,13 +11,13 @@ import (
 )
 
 type Log struct {
-	ID               uuid.UUID     `json:"id"`
-	AccountID        string        `json:"account_id"`
-	CreatedAt        time.Time     `json:"created_at"`
-	UpdatedAt        *time.Time    `json:"updated_at,omitempty"`
-	RuminateDuration time.Duration `json:"ruminate_duration"`
-	AnxietyLevel     int           `json:"anxiety_level"`
-	Notes            *string       `json:"notes,omitempty"`
+	ID              uuid.UUID  `json:"id"`
+	AccountID       string     `json:"account_id"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       *time.Time `json:"updated_at,omitempty"`
+	RuminateMinutes int        `json:"ruminate_minutes"`
+	AnxietyLevel    int        `json:"anxiety_level"`
+	Notes           *string    `json:"notes,omitempty"`
 }
 
 type LogList struct {
@@ -27,11 +27,11 @@ type LogList struct {
 
 const (
 	getRowCountQuery   = `SELECT count(*) FROM ocdlog WHERE account_id = $1;`
-	getAllLogsQuery    = `SELECT id, account_id, created_at, updated_at, ruminate_duration, anxiety_level, notes FROM ocdlog WHERE account_id = $1 ORDER BY created_at LIMIT $2 OFFSET $3;`
+	getAllLogsQuery    = `SELECT id, account_id, created_at, updated_at, ruminate_minutes, anxiety_level, notes FROM ocdlog WHERE account_id = $1 ORDER BY created_at LIMIT $2 OFFSET $3;`
 	deleteAllLogsQuery = `DELETE FROM ocdlog WHERE account_id = $1;`
-	getLogQuery        = `SELECT id, account_id, created_at, updated_at, ruminate_duration, anxiety_level, notes FROM ocdlog WHERE account_id = $1 AND id = $2 LIMIT 1;`
-	createLogQuery     = `INSERT INTO ocdlog (account_id, ruminate_duration, anxiety_level, notes) VALUES ($1, $2, $3, $4);`
-	updateLogQuery     = `UPDATE ocdlog SET ruminate_duration = $3, anxiety_level = $4, notes = $5, updated_at = CURRENT_TIMESTAMP WHERE account_id = $1 AND id = $2;`
+	getLogQuery        = `SELECT id, account_id, created_at, updated_at, ruminate_minutes, anxiety_level, notes FROM ocdlog WHERE account_id = $1 AND id = $2 LIMIT 1;`
+	createLogQuery     = `INSERT INTO ocdlog (account_id, ruminate_minutes, anxiety_level, notes) VALUES ($1, $2, $3, $4);`
+	updateLogQuery     = `UPDATE ocdlog SET ruminate_minutes = $3, anxiety_level = $4, notes = $5, updated_at = CURRENT_TIMESTAMP WHERE account_id = $1 AND id = $2;`
 	deleteLogQuery     = `DELETE FROM ocdlog WHERE account_id = $1 AND id = $2;`
 )
 
@@ -60,7 +60,7 @@ func (pg *Client) GetAllLogs(ctx context.Context) (*LogList, error) {
 	}
 	for rows.Next() {
 		var l Log
-		err = rows.Scan(&l.ID, &l.AccountID, &l.CreatedAt, &l.UpdatedAt, &l.RuminateDuration, &l.AnxietyLevel, &l.Notes)
+		err = rows.Scan(&l.ID, &l.AccountID, &l.CreatedAt, &l.UpdatedAt, &l.RuminateMinutes, &l.AnxietyLevel, &l.Notes)
 		if err != nil {
 			return nil, err
 		}
@@ -87,43 +87,23 @@ func (pg *Client) GetLog(ctx context.Context, id uuid.UUID) (*Log, error) {
 		return nil, err
 	}
 	row := pg.Connection.QueryRow(ctx, getLogQuery, user.UID, id)
-	err = row.Scan(&l.ID, &l.AccountID, &l.CreatedAt, &l.UpdatedAt, &l.RuminateDuration, &l.AnxietyLevel, &l.Notes)
+	err = row.Scan(&l.ID, &l.AccountID, &l.CreatedAt, &l.UpdatedAt, &l.RuminateMinutes, &l.AnxietyLevel, &l.Notes)
 	if err != nil {
 		return nil, err
 	}
 	return &l, nil
 }
 
-func (pg *Client) CreateOrUpdateLog(ctx context.Context, l Log) error {
-	_, err := pg.GetLog(ctx, l.ID)
-	if err != nil {
-		switch err {
-		case pgx.ErrNoRows:
-			err = pg.CreateLog(ctx, l)
-			if err != nil {
-				return err
-			}
-		default:
-			return err
-		}
-	}
-	err = pg.UpdateLog(ctx, l)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (pg Client) CreateLog(ctx context.Context, l Log) error {
-	err := pg.exec(ctx, createLogQuery, "create", l.RuminateDuration, l.AnxietyLevel, l.Notes)
+	err := pg.exec(ctx, createLogQuery, "create", l.RuminateMinutes, l.AnxietyLevel, l.Notes)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (pg Client) UpdateLog(ctx context.Context, l Log) error {
-	err := pg.exec(ctx, updateLogQuery, "update", l.ID, l.RuminateDuration, l.AnxietyLevel, l.Notes)
+func (pg Client) UpdateLog(ctx context.Context, id uuid.UUID, l Log) error {
+	err := pg.exec(ctx, updateLogQuery, "update", id, l.RuminateMinutes, l.AnxietyLevel, l.Notes)
 	if err != nil {
 		return err
 	}
@@ -150,4 +130,17 @@ func (pg Client) exec(ctx context.Context, query, action string, args ...interfa
 	}
 	log.LoggerFromContext(ctx).Info(fmt.Sprintf("%sd %d log/s", action, commandTag.RowsAffected()))
 	return nil
+}
+
+func (pg Client) LogExists(ctx context.Context, id uuid.UUID) (bool, error) {
+	_, err := pg.GetLog(ctx, id)
+	if err != nil {
+		switch err {
+		case pgx.ErrNoRows:
+			return false, nil
+		default:
+			return false, err
+		}
+	}
+	return true, nil
 }

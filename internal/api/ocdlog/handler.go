@@ -63,7 +63,34 @@ func (h handler) GetLog(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, r, result)
 }
 
-func (h handler) CreateOrUpdateLog(w http.ResponseWriter, r *http.Request) {
+func (h handler) UpdateLog(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "log-id"))
+	if err != nil {
+		api.BadRequestError(w, r, "invalid-id", err)
+		return
+	}
+	l := h.processRequestBody(w, r)
+	if l == nil {
+		return
+	}
+	exists, err := h.pg.LogExists(r.Context(), id)
+	if err != nil {
+		api.InternalServerError(w, r, "database-error", err)
+		return
+	}
+	if !exists {
+		api.NotFoundError(w, r, "not-found", nil)
+		return
+	}
+	err = h.pg.UpdateLog(r.Context(), id, *l)
+	if err != nil {
+		api.InternalServerError(w, r, "database-error", err)
+		return
+	}
+	render.NoContent(w, r)
+}
+
+func (h handler) CreateLog(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		api.BadRequestError(w, r, "invalid-body", err)
@@ -75,7 +102,7 @@ func (h handler) CreateOrUpdateLog(w http.ResponseWriter, r *http.Request) {
 		api.BadRequestError(w, r, "invalid-body", err)
 		return
 	}
-	err = h.pg.CreateOrUpdateLog(r.Context(), log)
+	err = h.pg.CreateLog(r.Context(), log)
 	if err != nil {
 		api.InternalServerError(w, r, "database-error", err)
 		return
@@ -90,4 +117,19 @@ func (h handler) DeleteLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	render.NoContent(w, r)
+}
+
+func (h handler) processRequestBody(w http.ResponseWriter, r *http.Request) *postgres.Log {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		api.BadRequestError(w, r, "invalid-body", err)
+		return nil
+	}
+	var l postgres.Log
+	err = json.Unmarshal(body, &l)
+	if err != nil {
+		api.BadRequestError(w, r, "invalid-body", err)
+		return nil
+	}
+	return &l
 }

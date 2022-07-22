@@ -11,11 +11,12 @@ import (
 func NewRouter(ctx context.Context, pg *postgres.Client) http.Handler {
 	h := NewHandler(ctx, pg)
 	r := chi.NewRouter()
+	r.Post("/", h.CreateLog)
 	r.Get("/", h.GetAllLogs)
 	r.Delete("/", h.DeleteAllLogs)
 	r.Route("/{log-id}", func(r chi.Router) {
+		r.Patch("/", h.UpdateLog)
 		r.Get("/", h.GetLog)
-		r.Put("/", h.CreateOrUpdateLog)
 		r.Delete("/", h.DeleteLog)
 	})
 	return r
