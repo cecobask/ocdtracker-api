@@ -2,145 +2,146 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/cecobask/ocd-tracker-api/internal/api/middleware"
+	"github.com/cecobask/ocd-tracker-api/internal/entity"
 	"github.com/cecobask/ocd-tracker-api/internal/log"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
-	"time"
+	"strings"
 )
-
-type Log struct {
-	ID              uuid.UUID  `json:"id"`
-	AccountID       string     `json:"account_id"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       *time.Time `json:"updated_at,omitempty"`
-	RuminateMinutes int        `json:"ruminate_minutes"`
-	AnxietyLevel    int        `json:"anxiety_level"`
-	Notes           *string    `json:"notes,omitempty"`
-}
-
-type LogList struct {
-	Logs       []Log                        `json:"logs"`
-	Pagination middleware.PaginationDetails `json:"pagination"`
-}
 
 const (
-	getRowCountQuery   = `SELECT count(*) FROM ocdlog WHERE account_id = $1;`
-	getAllLogsQuery    = `SELECT id, account_id, created_at, updated_at, ruminate_minutes, anxiety_level, notes FROM ocdlog WHERE account_id = $1 ORDER BY created_at LIMIT $2 OFFSET $3;`
-	deleteAllLogsQuery = `DELETE FROM ocdlog WHERE account_id = $1;`
-	getLogQuery        = `SELECT id, account_id, created_at, updated_at, ruminate_minutes, anxiety_level, notes FROM ocdlog WHERE account_id = $1 AND id = $2 LIMIT 1;`
 	createLogQuery     = `INSERT INTO ocdlog (account_id, ruminate_minutes, anxiety_level, notes) VALUES ($1, $2, $3, $4);`
-	updateLogQuery     = `UPDATE ocdlog SET ruminate_minutes = $3, anxiety_level = $4, notes = $5, updated_at = CURRENT_TIMESTAMP WHERE account_id = $1 AND id = $2;`
+	deleteAllLogsQuery = `DELETE FROM ocdlog WHERE account_id = $1;`
 	deleteLogQuery     = `DELETE FROM ocdlog WHERE account_id = $1 AND id = $2;`
+	getAllLogsQuery    = `SELECT id, account_id, created_at, updated_at, ruminate_minutes, anxiety_level, notes FROM ocdlog WHERE account_id = $1 ORDER BY created_at LIMIT $2 OFFSET $3;`
+	getLogQuery        = `SELECT id, account_id, created_at, updated_at, ruminate_minutes, anxiety_level, notes FROM ocdlog WHERE account_id = $1 AND id = $2 LIMIT 1;`
+	getRowCountQuery   = `SELECT count(*) FROM ocdlog WHERE account_id = $1;`
 )
 
-func (pg *Client) GetAllLogs(ctx context.Context) (*LogList, error) {
-	logList := LogList{
-		Logs: make([]Log, 0),
-	}
-	user, err := middleware.UserFromContext(ctx)
-	if err != nil {
-		return nil, err
+func (pg *Client) GetAllLogs(ctx context.Context, accountID string, limit, offset int) (*entity.OCDLogList, error) {
+	ocdLogList := entity.OCDLogList{
+		Logs: make([]entity.OCDLog, 0),
 	}
 	var rowCount int
-	err = pg.Connection.QueryRow(ctx, getRowCountQuery, user.UID).Scan(&rowCount)
+	err := pg.Connection.QueryRow(ctx, getRowCountQuery, accountID).Scan(&rowCount)
 	if err != nil {
 		return nil, err
 	}
-	pagination := middleware.PaginationFromContext(ctx)
-	paginationDetails := middleware.PaginationDetails{
-		Limit:  pagination.Limit,
-		Offset: pagination.Offset,
+	paginationDetails := entity.PaginationDetails{
+		Limit:  limit,
+		Offset: offset,
 		Total:  rowCount,
 	}
-	rows, err := pg.Connection.Query(ctx, getAllLogsQuery, user.UID, pagination.Limit, pagination.Offset)
+	rows, err := pg.Connection.Query(ctx, getAllLogsQuery, accountID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
-		var l Log
-		err = rows.Scan(&l.ID, &l.AccountID, &l.CreatedAt, &l.UpdatedAt, &l.RuminateMinutes, &l.AnxietyLevel, &l.Notes)
+		var ocdLog entity.OCDLog
+		err = rows.Scan(&ocdLog.ID, &ocdLog.AccountID, &ocdLog.CreatedAt, &ocdLog.UpdatedAt, &ocdLog.RuminateMinutes, &ocdLog.AnxietyLevel, &ocdLog.Notes)
 		if err != nil {
 			return nil, err
 		}
-		logList.Logs = append(logList.Logs, l)
+		ocdLogList.Logs = append(ocdLogList.Logs, ocdLog)
 	}
-	paginationDetails.Count = len(logList.Logs)
-	logList.Pagination = paginationDetails
-	log.LoggerFromContext(ctx).Info(fmt.Sprintf("retrieved %d logs", len(logList.Logs)))
-	return &logList, nil
+	paginationDetails.Count = len(ocdLogList.Logs)
+	ocdLogList.Pagination = paginationDetails
+	log.LoggerFromContext(ctx).Info(fmt.Sprintf("retrieved %d logs", len(ocdLogList.Logs)))
+	return &ocdLogList, nil
 }
 
-func (pg *Client) DeleteAllLogs(ctx context.Context) error {
-	err := pg.exec(ctx, deleteAllLogsQuery, "delete")
+func (pg *Client) DeleteAllLogs(ctx context.Context, accountID string) error {
+	err := pg.logExec(ctx, deleteAllLogsQuery, "delete", "log", accountID)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (pg *Client) GetLog(ctx context.Context, id uuid.UUID) (*Log, error) {
-	l := Log{}
-	user, err := middleware.UserFromContext(ctx)
+func (pg *Client) GetLog(ctx context.Context, accountID string, id uuid.UUID) (*entity.OCDLog, error) {
+	ocdLog := entity.OCDLog{}
+	row := pg.Connection.QueryRow(ctx, getLogQuery, accountID, id)
+	err := row.Scan(&ocdLog.ID, &ocdLog.AccountID, &ocdLog.CreatedAt, &ocdLog.UpdatedAt, &ocdLog.RuminateMinutes, &ocdLog.AnxietyLevel, &ocdLog.Notes)
 	if err != nil {
 		return nil, err
 	}
-	row := pg.Connection.QueryRow(ctx, getLogQuery, user.UID, id)
-	err = row.Scan(&l.ID, &l.AccountID, &l.CreatedAt, &l.UpdatedAt, &l.RuminateMinutes, &l.AnxietyLevel, &l.Notes)
-	if err != nil {
-		return nil, err
-	}
-	return &l, nil
+	return &ocdLog, nil
 }
 
-func (pg Client) CreateLog(ctx context.Context, l Log) error {
-	err := pg.exec(ctx, createLogQuery, "create", l.RuminateMinutes, l.AnxietyLevel, l.Notes)
+func (pg *Client) CreateLog(ctx context.Context, ocdLog entity.OCDLog) error {
+	err := pg.logExec(ctx, createLogQuery, "create", "log", ocdLog.AccountID, ocdLog.RuminateMinutes, ocdLog.AnxietyLevel, ocdLog.Notes)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (pg Client) UpdateLog(ctx context.Context, id uuid.UUID, l Log) error {
-	err := pg.exec(ctx, updateLogQuery, "update", id, l.RuminateMinutes, l.AnxietyLevel, l.Notes)
+func (pg *Client) UpdateLog(ctx context.Context, accountID string, id uuid.UUID, ocdLog entity.OCDLog) error {
+	var (
+		allowedFields = []string{"ruminate_minutes", "anxiety_level", "notes"}
+		fields        []string
+		fieldValues   []interface{}
+		fieldUpdates  map[string]interface{}
+	)
+	jsonData, err := json.Marshal(ocdLog)
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal(jsonData, &fieldUpdates)
+	if err != nil {
+		return err
+	}
+	// start at 3 because 1 & 2 are reserved for account_id & id fields
+	index := 3
+	fieldValues = append(fieldValues, accountID, id)
+	for _, allowedField := range allowedFields {
+		for fieldName, fieldValue := range fieldUpdates {
+			if fieldName == allowedField {
+				fields = append(fields, fmt.Sprintf("%s = $%d,", fieldName, index))
+				fieldValues = append(fieldValues, fieldValue)
+				index++
+			}
+		}
+	}
+	if len(fields) > 0 {
+		fields = append(fields, "updated_at = CURRENT_TIMESTAMP")
+		query := "UPDATE ocdlog SET " + strings.Join(fields, " ") + " WHERE account_id = $1 AND id = $2;"
+		err = pg.logExec(ctx, query, "update", "log", fieldValues...)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (pg *Client) DeleteLog(ctx context.Context, accountID string, id uuid.UUID) error {
+	err := pg.logExec(ctx, deleteLogQuery, "delete", "log", accountID, id)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (pg *Client) DeleteLog(ctx context.Context, id string) error {
-	err := pg.exec(ctx, deleteLogQuery, "delete", id)
+func (pg *Client) LogExists(ctx context.Context, accountID string, id uuid.UUID) (bool, *entity.OCDLog, error) {
+	ocdLog, err := pg.GetLog(ctx, accountID, id)
 	if err != nil {
-		return err
+		switch err {
+		case pgx.ErrNoRows:
+			return false, nil, nil
+		default:
+			return false, nil, err
+		}
 	}
-	return nil
+	return true, ocdLog, nil
 }
 
-func (pg Client) exec(ctx context.Context, query, action string, args ...interface{}) error {
-	user, err := middleware.UserFromContext(ctx)
-	if err != nil {
-		return err
-	}
-	args = append([]interface{}{user.UID}, args...)
+func (pg *Client) logExec(ctx context.Context, query, action, entity string, args ...interface{}) error {
 	commandTag, err := pg.Connection.Exec(ctx, query, args...)
 	if err != nil {
 		return err
 	}
-	log.LoggerFromContext(ctx).Info(fmt.Sprintf("%sd %d log/s", action, commandTag.RowsAffected()))
+	log.LoggerFromContext(ctx).Info(fmt.Sprintf("%sd %d %s/s", action, commandTag.RowsAffected(), entity))
 	return nil
-}
-
-func (pg Client) LogExists(ctx context.Context, id uuid.UUID) (bool, error) {
-	_, err := pg.GetLog(ctx, id)
-	if err != nil {
-		switch err {
-		case pgx.ErrNoRows:
-			return false, nil
-		default:
-			return false, err
-		}
-	}
-	return true, nil
 }

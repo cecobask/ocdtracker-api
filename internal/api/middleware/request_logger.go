@@ -25,17 +25,17 @@ func (rlm *requestLoggerMiddleware) Handle(next http.Handler) http.Handler {
 		requestTime := time.Now()
 		logger := log.LoggerFromContext(r.Context()).With(zap.String("request_id", uuid.New().String()))
 		r = r.WithContext(log.ContextWithLogger(r.Context(), logger))
-		wrw := chiMiddleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		rw := chiMiddleware.NewWrapResponseWriter(w, r.ProtoMajor)
 		defer func() {
 			logger.Info(
 				"request info",
 				zap.String("method", r.Method),
 				zap.String("url", r.URL.String()),
-				zap.Int("status", wrw.Status()),
+				zap.Int("status", rw.Status()),
 				zap.Duration("duration", time.Since(requestTime)),
 			)
 		}()
-		next.ServeHTTP(wrw, r)
+		next.ServeHTTP(rw, r)
 	}
 	return http.HandlerFunc(fn)
 }

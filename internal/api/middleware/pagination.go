@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"github.com/cecobask/ocd-tracker-api/internal/entity"
 	"net/http"
 	"strconv"
 )
@@ -12,13 +13,6 @@ const (
 
 type paginationMiddleware struct {
 	ctx context.Context
-}
-
-type PaginationDetails struct {
-	Limit  int `json:"limit"`
-	Offset int `json:"offset"`
-	Count  int `json:"count"`
-	Total  int `json:"total"`
 }
 
 func NewPaginationMiddleware(ctx context.Context) *paginationMiddleware {
@@ -39,7 +33,7 @@ func (p paginationMiddleware) Handle(next http.Handler) http.Handler {
 		if err != nil {
 			offset = 0
 		}
-		paginationDetails := PaginationDetails{
+		paginationDetails := entity.PaginationDetails{
 			Limit:  limit,
 			Offset: offset,
 		}
@@ -49,8 +43,8 @@ func (p paginationMiddleware) Handle(next http.Handler) http.Handler {
 	return http.HandlerFunc(fn)
 }
 
-func PaginationFromContext(ctx context.Context) *PaginationDetails {
-	if paginationDetails, ok := ctx.Value(ctxKeyPagination).(*PaginationDetails); ok {
+func PaginationFromContext(ctx context.Context) *entity.PaginationDetails {
+	if paginationDetails, ok := ctx.Value(ctxKeyPagination).(*entity.PaginationDetails); ok {
 		return paginationDetails
 	}
 	return nil

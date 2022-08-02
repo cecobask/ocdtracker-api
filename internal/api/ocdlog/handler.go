@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/cecobask/ocd-tracker-api/internal/api"
+	"github.com/cecobask/ocd-tracker-api/internal/api/middleware"
 	"github.com/cecobask/ocd-tracker-api/internal/db/postgres"
+	"github.com/cecobask/ocd-tracker-api/internal/entity"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/google/uuid"
@@ -26,7 +28,13 @@ func NewHandler(ctx context.Context, pg *postgres.Client) *handler {
 }
 
 func (h handler) GetAllLogs(w http.ResponseWriter, r *http.Request) {
-	result, err := h.pg.GetAllLogs(r.Context())
+	account, err := middleware.AccountFromContext(r.Context())
+	if err != nil {
+		api.InternalServerError(w, r, "invalid-account-ctx", err)
+		return
+	}
+	pagination := middleware.PaginationFromContext(r.Context())
+	result, err := h.pg.GetAllLogs(r.Context(), account.ID, pagination.Limit, pagination.Offset)
 	if err != nil {
 		api.InternalServerError(w, r, "database-error", err)
 		return
@@ -35,7 +43,12 @@ func (h handler) GetAllLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handler) DeleteAllLogs(w http.ResponseWriter, r *http.Request) {
-	err := h.pg.DeleteAllLogs(r.Context())
+	account, err := middleware.AccountFromContext(r.Context())
+	if err != nil {
+		api.InternalServerError(w, r, "invalid-account-ctx", err)
+		return
+	}
+	err = h.pg.DeleteAllLogs(r.Context(), account.ID)
 	if err != nil {
 		api.InternalServerError(w, r, "database-error", err)
 		return
@@ -44,12 +57,17 @@ func (h handler) DeleteAllLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handler) GetLog(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "log-id"))
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		api.BadRequestError(w, r, "invalid-id", err)
 		return
 	}
-	result, err := h.pg.GetLog(r.Context(), id)
+	account, err := middleware.AccountFromContext(r.Context())
+	if err != nil {
+		api.InternalServerError(w, r, "invalid-account-ctx", err)
+		return
+	}
+	result, err := h.pg.GetLog(r.Context(), account.ID, id)
 	if err != nil {
 		switch err {
 		case pgx.ErrNoRows:
@@ -64,16 +82,21 @@ func (h handler) GetLog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handler) UpdateLog(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "log-id"))
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		api.BadRequestError(w, r, "invalid-id", err)
 		return
 	}
-	l := h.processRequestBody(w, r)
-	if l == nil {
+	requestBody := processRequestBody(w, r)
+	if requestBody == nil {
 		return
 	}
-	exists, err := h.pg.LogExists(r.Context(), id)
+	account, err := middleware.AccountFromContext(r.Context())
+	if err != nil {
+		api.InternalServerError(w, r, "invalid-account-ctx", err)
+		return
+	}
+	exists, _, err := h.pg.LogExists(r.Context(), account.ID, id)
 	if err != nil {
 		api.InternalServerError(w, r, "database-error", err)
 		return
@@ -82,7 +105,7 @@ func (h handler) UpdateLog(w http.ResponseWriter, r *http.Request) {
 		api.NotFoundError(w, r, "not-found", nil)
 		return
 	}
-	err = h.pg.UpdateLog(r.Context(), id, *l)
+	err = h.pg.UpdateLog(r.Context(), account.ID, id, *requestBody)
 	if err != nil {
 		api.InternalServerError(w, r, "database-error", err)
 		return
@@ -91,18 +114,17 @@ func (h handler) UpdateLog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handler) CreateLog(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		api.BadRequestError(w, r, "invalid-body", err)
+	requestBody := processRequestBody(w, r)
+	if requestBody == nil {
 		return
 	}
-	var log postgres.Log
-	err = json.Unmarshal(body, &log)
+	account, err := middleware.AccountFromContext(r.Context())
 	if err != nil {
-		api.BadRequestError(w, r, "invalid-body", err)
+		api.InternalServerError(w, r, "invalid-account-ctx", err)
 		return
 	}
-	err = h.pg.CreateLog(r.Context(), log)
+	requestBody.AccountID = account.ID
+	err = h.pg.CreateLog(r.Context(), *requestBody)
 	if err != nil {
 		api.InternalServerError(w, r, "database-error", err)
 		return
@@ -111,7 +133,17 @@ func (h handler) CreateLog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handler) DeleteLog(w http.ResponseWriter, r *http.Request) {
-	err := h.pg.DeleteLog(r.Context(), chi.URLParam(r, "log-id"))
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		api.BadRequestError(w, r, "invalid-id", err)
+		return
+	}
+	account, err := middleware.AccountFromContext(r.Context())
+	if err != nil {
+		api.InternalServerError(w, r, "invalid-account-ctx", err)
+		return
+	}
+	err = h.pg.DeleteLog(r.Context(), account.ID, id)
 	if err != nil {
 		api.InternalServerError(w, r, "database-error", err)
 		return
@@ -119,17 +151,21 @@ func (h handler) DeleteLog(w http.ResponseWriter, r *http.Request) {
 	render.NoContent(w, r)
 }
 
-func (h handler) processRequestBody(w http.ResponseWriter, r *http.Request) *postgres.Log {
+func processRequestBody(w http.ResponseWriter, r *http.Request) *entity.OCDLog {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		api.BadRequestError(w, r, "invalid-body", err)
+		api.BadRequestError(w, r, "invalid-request-body", err)
 		return nil
 	}
-	var l postgres.Log
-	err = json.Unmarshal(body, &l)
+	var ocdLog entity.OCDLog
+	err = json.Unmarshal(body, &ocdLog)
 	if err != nil {
-		api.BadRequestError(w, r, "invalid-body", err)
+		api.BadRequestError(w, r, "invalid-request-body", err)
 		return nil
 	}
-	return &l
+	if err := ocdLog.Validate(); err != nil {
+		api.BadRequestError(w, r, "invalid-request-body", err)
+		return nil
+	}
+	return &ocdLog
 }

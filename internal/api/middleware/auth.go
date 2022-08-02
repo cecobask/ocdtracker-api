@@ -6,6 +6,8 @@ import (
 	firebase "firebase.google.com/go/v4"
 	firebaseAuth "firebase.google.com/go/v4/auth"
 	"github.com/cecobask/ocd-tracker-api/internal/api"
+	"github.com/cecobask/ocd-tracker-api/internal/db/postgres"
+	"github.com/cecobask/ocd-tracker-api/internal/entity"
 	"github.com/cecobask/ocd-tracker-api/internal/log"
 	"go.uber.org/zap"
 	"net/http"
@@ -14,19 +16,20 @@ import (
 )
 
 const (
-	ctxKeyUser string = "ctxKeyUser"
+	ctxKeyAccount string = "ctxKeyAccount"
 )
 
 var (
-	ErrorNoUserInContext = errors.New("no user in context")
+	ErrorNoAccountInContext = errors.New("no account in context")
 )
 
 type authMiddleware struct {
 	ctx        context.Context
 	authClient *firebaseAuth.Client
+	pg         *postgres.Client
 }
 
-func NewAuthMiddleware(ctx context.Context) *authMiddleware {
+func NewAuthMiddleware(ctx context.Context, pg *postgres.Client) *authMiddleware {
 	logger := log.LoggerFromContext(ctx)
 	config := firebase.Config{ProjectID: os.Getenv("FIREBASE_PROJECT_ID")}
 	firebaseApp, err := firebase.NewApp(ctx, &config)
@@ -40,6 +43,7 @@ func NewAuthMiddleware(ctx context.Context) *authMiddleware {
 	return &authMiddleware{
 		ctx:        ctx,
 		authClient: authClient,
+		pg:         pg,
 	}
 }
 
@@ -48,22 +52,40 @@ func (a *authMiddleware) Handle(next http.Handler) http.Handler {
 	handlerFn := func(w http.ResponseWriter, r *http.Request) {
 		bearerToken := tokenFromHeader(r)
 		if bearerToken == "" {
-			api.UnauthorisedError(w, r, "empty-bearer-token", nil)
+			api.UnauthorisedError(w, r, "invalid-jwt", nil)
 			return
 		}
 		token, err := a.authClient.VerifyIDToken(a.ctx, bearerToken)
 		if err != nil {
-			api.UnauthorisedError(w, r, "unable-to-verify-jwt", err)
+			api.UnauthorisedError(w, r, "invalid-jwt", err)
 			return
 		}
 		user, err := a.authClient.GetUser(a.ctx, token.UID)
 		if err != nil {
-			api.NotFoundError(w, r, "unable-to-find-user", err)
+			api.NotFoundError(w, r, "firebase-account-not-found", err)
 			return
 		}
-		// add user to the request context and as field to the logger
-		logger := log.LoggerFromContext(r.Context()).With(zap.String("user", user.UID))
-		r = r.WithContext(ContextWithUser(log.ContextWithLogger(r.Context(), logger), user))
+		logger := log.LoggerFromContext(r.Context()).With(zap.String("account", user.UID))
+		ctx := log.ContextWithLogger(r.Context(), logger)
+		r = r.WithContext(ctx)
+		exists, account, err := a.pg.AccountExists(ctx, user.UID)
+		if err != nil {
+			api.InternalServerError(w, r, "database-error", err)
+			return
+		}
+		if !exists {
+			account = &entity.Account{
+				ID:    user.UID,
+				Email: &user.Email,
+			}
+			err = a.pg.CreateAccount(ctx, *account)
+			if err != nil {
+				api.InternalServerError(w, r, "database-error", err)
+				return
+			}
+		}
+		ctx = ContextWithAccount(log.ContextWithLogger(r.Context(), logger), account)
+		r = r.WithContext(ctx)
 		next.ServeHTTP(w, r)
 	}
 	return http.HandlerFunc(handlerFn)
@@ -77,14 +99,14 @@ func tokenFromHeader(r *http.Request) string {
 	return ""
 }
 
-func ContextWithUser(ctx context.Context, user *firebaseAuth.UserRecord) context.Context {
-	return context.WithValue(ctx, ctxKeyUser, user)
+func ContextWithAccount(ctx context.Context, account *entity.Account) context.Context {
+	return context.WithValue(ctx, ctxKeyAccount, account)
 }
 
-func UserFromContext(ctx context.Context) (*firebaseAuth.UserRecord, error) {
-	user, ok := ctx.Value(ctxKeyUser).(*firebaseAuth.UserRecord)
+func AccountFromContext(ctx context.Context) (*entity.Account, error) {
+	user, ok := ctx.Value(ctxKeyAccount).(*entity.Account)
 	if ok {
 		return user, nil
 	}
-	return nil, ErrorNoUserInContext
+	return nil, ErrorNoAccountInContext
 }

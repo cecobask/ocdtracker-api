@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/cecobask/ocd-tracker-api/internal/api/account"
 	"github.com/cecobask/ocd-tracker-api/internal/api/middleware"
 	"github.com/cecobask/ocd-tracker-api/internal/api/ocdlog"
 	"github.com/cecobask/ocd-tracker-api/internal/db/postgres"
@@ -28,10 +29,11 @@ func main() {
 	chiRouter.Use(
 		chiMiddleware.Recoverer,
 		middleware.NewRequestLoggerMiddleware(ctx).Handle,
-		middleware.NewAuthMiddleware(ctx).Handle,
+		middleware.NewAuthMiddleware(ctx, pg).Handle,
 		middleware.NewPaginationMiddleware(ctx).Handle,
 	)
 	chiRouter.Mount("/ocdlog", ocdlog.NewRouter(ctx, pg))
+	chiRouter.Mount("/account", account.NewRouter(ctx, pg))
 	server := http.Server{
 		Addr:    fmt.Sprintf(":%s", os.Getenv("SERVER_PORT")),
 		Handler: chiRouter,
