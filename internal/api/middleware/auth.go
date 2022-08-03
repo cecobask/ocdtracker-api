@@ -3,15 +3,14 @@ package middleware
 import (
 	"context"
 	"errors"
-	firebase "firebase.google.com/go/v4"
 	firebaseAuth "firebase.google.com/go/v4/auth"
 	"github.com/cecobask/ocd-tracker-api/internal/api"
 	"github.com/cecobask/ocd-tracker-api/internal/db/postgres"
-	"github.com/cecobask/ocd-tracker-api/internal/entity"
-	"github.com/cecobask/ocd-tracker-api/internal/log"
+	"github.com/cecobask/ocd-tracker-api/pkg/entity"
+	"github.com/cecobask/ocd-tracker-api/pkg/log"
+	"github.com/jackc/pgx/v4"
 	"go.uber.org/zap"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -24,26 +23,16 @@ var (
 )
 
 type authMiddleware struct {
-	ctx        context.Context
-	authClient *firebaseAuth.Client
-	pg         *postgres.Client
+	ctx         context.Context
+	authClient  *firebaseAuth.Client
+	accountRepo *postgres.AccountRepository
 }
 
-func NewAuthMiddleware(ctx context.Context, pg *postgres.Client) *authMiddleware {
-	logger := log.LoggerFromContext(ctx)
-	config := firebase.Config{ProjectID: os.Getenv("FIREBASE_PROJECT_ID")}
-	firebaseApp, err := firebase.NewApp(ctx, &config)
-	if err != nil {
-		logger.Fatal("error initializing firebase app", zap.Error(err))
-	}
-	authClient, err := firebaseApp.Auth(ctx)
-	if err != nil {
-		logger.Fatal("unable to create firebase auth client", zap.Error(err))
-	}
+func NewAuthMiddleware(ctx context.Context, authClient *firebaseAuth.Client, accountRepo *postgres.AccountRepository) *authMiddleware {
 	return &authMiddleware{
-		ctx:        ctx,
-		authClient: authClient,
-		pg:         pg,
+		ctx:         ctx,
+		authClient:  authClient,
+		accountRepo: accountRepo,
 	}
 }
 
@@ -68,18 +57,20 @@ func (a *authMiddleware) Handle(next http.Handler) http.Handler {
 		logger := log.LoggerFromContext(r.Context()).With(zap.String("account", user.UID))
 		ctx := log.ContextWithLogger(r.Context(), logger)
 		r = r.WithContext(ctx)
-		exists, account, err := a.pg.AccountExists(ctx, user.UID)
+		account, err := a.accountRepo.GetAccount(ctx, user.UID)
 		if err != nil {
-			api.InternalServerError(w, r, "database-error", err)
-			return
-		}
-		if !exists {
-			account = &entity.Account{
-				ID:    user.UID,
-				Email: &user.Email,
-			}
-			err = a.pg.CreateAccount(ctx, *account)
-			if err != nil {
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				account = &entity.Account{
+					ID:    user.UID,
+					Email: &user.Email,
+				}
+				err = a.accountRepo.CreateAccount(ctx, *account)
+				if err != nil {
+					api.InternalServerError(w, r, "database-error", err)
+					return
+				}
+			default:
 				api.InternalServerError(w, r, "database-error", err)
 				return
 			}

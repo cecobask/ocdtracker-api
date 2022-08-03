@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"context"
-	"github.com/cecobask/ocd-tracker-api/internal/entity"
+	"github.com/cecobask/ocd-tracker-api/pkg/entity"
 	"net/http"
 	"strconv"
 )

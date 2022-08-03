@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"context"
-	"github.com/cecobask/ocd-tracker-api/internal/log"
+	"github.com/cecobask/ocd-tracker-api/pkg/log"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	"go.uber.org/zap"

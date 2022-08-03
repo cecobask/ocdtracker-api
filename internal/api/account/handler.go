@@ -3,42 +3,31 @@ package account
 import (
 	"context"
 	"encoding/json"
+	firebaseAuth "firebase.google.com/go/v4/auth"
 	"github.com/cecobask/ocd-tracker-api/internal/api"
 	"github.com/cecobask/ocd-tracker-api/internal/api/middleware"
 	"github.com/cecobask/ocd-tracker-api/internal/db/postgres"
-	"github.com/cecobask/ocd-tracker-api/internal/entity"
+	"github.com/cecobask/ocd-tracker-api/pkg/entity"
 	"github.com/go-chi/render"
-	"github.com/jackc/pgx/v4"
 	"io"
 	"net/http"
 )
 
 type handler struct {
-	ctx context.Context
-	pg  *postgres.Client
+	ctx         context.Context
+	accountRepo *postgres.AccountRepository
+	authClient  *firebaseAuth.Client
 }
 
-func NewHandler(ctx context.Context, pg *postgres.Client) *handler {
+func NewHandler(ctx context.Context, accountRepo *postgres.AccountRepository, authClient *firebaseAuth.Client) *handler {
 	return &handler{
-		ctx: ctx,
-		pg:  pg,
+		ctx:         ctx,
+		accountRepo: accountRepo,
+		authClient:  authClient,
 	}
 }
 
-func (h handler) CreateAccount(w http.ResponseWriter, r *http.Request) {
-	requestBody := processRequestBody(w, r)
-	if requestBody == nil {
-		return
-	}
-	err := h.pg.CreateAccount(r.Context(), *requestBody)
-	if err != nil {
-		api.InternalServerError(w, r, "database-error", err)
-		return
-	}
-	render.Status(r, http.StatusCreated)
-}
-
-func (h handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
+func (h *handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 	requestBody := processRequestBody(w, r)
 	if requestBody == nil {
 		return
@@ -48,16 +37,12 @@ func (h handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 		api.InternalServerError(w, r, "invalid-account-ctx", err)
 		return
 	}
-	exists, _, err := h.pg.AccountExists(r.Context(), account.ID)
+	_, err = h.accountRepo.GetAccount(r.Context(), account.ID)
 	if err != nil {
-		api.InternalServerError(w, r, "database-error", err)
+		api.HandleRetrievalError(w, r, err)
 		return
 	}
-	if !exists {
-		api.NotFoundError(w, r, "not-found", nil)
-		return
-	}
-	err = h.pg.UpdateAccount(r.Context(), account.ID, *requestBody)
+	err = h.accountRepo.UpdateAccount(r.Context(), account.ID, *requestBody)
 	if err != nil {
 		api.InternalServerError(w, r, "database-error", err)
 		return
@@ -65,35 +50,34 @@ func (h handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 	render.NoContent(w, r)
 }
 
-func (h handler) GetAccount(w http.ResponseWriter, r *http.Request) {
+func (h *handler) GetAccount(w http.ResponseWriter, r *http.Request) {
 	account, err := middleware.AccountFromContext(r.Context())
 	if err != nil {
 		api.InternalServerError(w, r, "invalid-account-ctx", err)
 		return
 	}
-	result, err := h.pg.GetAccount(r.Context(), account.ID)
+	result, err := h.accountRepo.GetAccount(r.Context(), account.ID)
 	if err != nil {
-		switch err {
-		case pgx.ErrNoRows:
-			api.NotFoundError(w, r, "not-found", err)
-			return
-		default:
-			api.InternalServerError(w, r, "database-error", err)
-			return
-		}
+		api.HandleRetrievalError(w, r, err)
+		return
 	}
 	render.JSON(w, r, result)
 }
 
-func (h handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
+func (h *handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	account, err := middleware.AccountFromContext(r.Context())
 	if err != nil {
 		api.InternalServerError(w, r, "invalid-account-ctx", err)
 		return
 	}
-	err = h.pg.DeleteAccount(r.Context(), account.ID)
+	err = h.accountRepo.DeleteAccount(r.Context(), account.ID)
 	if err != nil {
 		api.InternalServerError(w, r, "database-error", err)
+		return
+	}
+	err = h.authClient.DeleteUser(r.Context(), account.ID)
+	if err != nil {
+		api.InternalServerError(w, r, "firebase-error", err)
 		return
 	}
 	render.NoContent(w, r)

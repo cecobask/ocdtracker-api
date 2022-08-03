@@ -1,36 +1,51 @@
 package api
 
 import (
-	"github.com/cecobask/ocd-tracker-api/internal/log"
+	"errors"
+	"github.com/cecobask/ocd-tracker-api/pkg/log"
 	"github.com/go-chi/render"
+	"github.com/jackc/pgx/v4"
 	"go.uber.org/zap"
 	"net/http"
 )
 
-func UnauthorisedError(w http.ResponseWriter, r *http.Request, slug string, err error) {
-	httpRespondWithError(w, r, slug, err, "unauthorised", http.StatusUnauthorized)
+func UnauthorisedError(w http.ResponseWriter, r *http.Request, message string, err error) {
+	httpRespondWithError(w, r, "unauthorised", err, message, http.StatusUnauthorized)
 }
 
-func NotFoundError(w http.ResponseWriter, r *http.Request, slug string, err error) {
-	httpRespondWithError(w, r, slug, err, "not-found", http.StatusNotFound)
+func NotFoundError(w http.ResponseWriter, r *http.Request, message string, err error) {
+	httpRespondWithError(w, r, "not-found", err, message, http.StatusNotFound)
 }
 
-func InternalServerError(w http.ResponseWriter, r *http.Request, slug string, err error) {
-	httpRespondWithError(w, r, slug, err, "internal-server-error", http.StatusInternalServerError)
+func InternalServerError(w http.ResponseWriter, r *http.Request, message string, err error) {
+	httpRespondWithError(w, r, "internal-server-error", err, message, http.StatusInternalServerError)
 }
 
-func BadRequestError(w http.ResponseWriter, r *http.Request, slug string, err error) {
-	httpRespondWithError(w, r, slug, err, "bad-request", http.StatusBadRequest)
+func BadRequestError(w http.ResponseWriter, r *http.Request, message string, err error) {
+	httpRespondWithError(w, r, "bad-request", err, message, http.StatusBadRequest)
 }
 
 func httpRespondWithError(w http.ResponseWriter, r *http.Request, slug string, err error, message string, status int) {
 	logger := log.LoggerFromContext(r.Context())
 	logger.Warn(message, zap.String("error-slug", slug), zap.Int("status", status), zap.Error(err))
-	resp := ErrorResponse{slug}
+	resp := ErrorResponse{
+		Slug:    slug,
+		Message: message,
+	}
 	render.Status(r, status)
 	render.JSON(w, r, resp)
 }
 
 type ErrorResponse struct {
-	Slug string `json:"slug"`
+	Slug    string `json:"slug"`
+	Message string `json:"message"`
+}
+
+func HandleRetrievalError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		NotFoundError(w, r, "database-error", err)
+	default:
+		InternalServerError(w, r, "database-error", err)
+	}
 }

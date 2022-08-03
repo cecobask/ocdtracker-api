@@ -8,8 +8,8 @@ import (
 )
 
 // NewRouter creates all routes associated with OCD logs
-func NewRouter(ctx context.Context, pg *postgres.Client) http.Handler {
-	h := NewHandler(ctx, pg)
+func NewRouter(ctx context.Context, ocdLogRepo *postgres.OCDLogRepository) http.Handler {
+	h := NewHandler(ctx, ocdLogRepo)
 	r := chi.NewRouter()
 	r.Post("/", h.CreateLog)
 	r.Get("/", h.GetAllLogs)

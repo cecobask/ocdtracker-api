@@ -4,9 +4,9 @@ CREATE TABLE IF NOT EXISTS account(
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP,
     display_name VARCHAR(128),
-    wake_time TIME WITHOUT TIME ZONE DEFAULT '09:00:00',
-    sleep_time TIME WITHOUT TIME ZONE DEFAULT '23:00:00',
-    notification_interval INTEGER DEFAULT 3
+    wake_time VARCHAR(5) NOT NULL DEFAULT '09:00',
+    sleep_time VARCHAR(5) NOT NULL DEFAULT '23:00',
+    notification_interval INTEGER NOT NULL DEFAULT 3
 );
 
 CREATE TABLE IF NOT EXISTS ocdlog(
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS ocdlog(
     account_id VARCHAR(128) REFERENCES account(id) ON DELETE CASCADE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP,
-    ruminate_minutes INTEGER DEFAULT 0,
-    anxiety_level INTEGER DEFAULT 0,
+    ruminate_minutes INTEGER NOT NULL DEFAULT 0,
+    anxiety_level INTEGER NOT NULL DEFAULT 0,
     notes TEXT
 );
