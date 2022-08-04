@@ -16,6 +16,8 @@ type Account struct {
 	WakeTime             *string    `json:"wake_time,omitempty"`  // 24-hour clock; hours and minutes (15:04)
 	SleepTime            *string    `json:"sleep_time,omitempty"` // 24-hour clock; hours and minutes (15:04)
 	NotificationInterval *int       `json:"notification_interval,omitempty"`
+	Password             *string    `json:"password,omitempty"` // not stored; param for firebase user updates
+	PhotoURL             *string    `json:"photo_url,omitempty"`
 }
 
 func (account Account) Validate() error {
@@ -24,5 +26,6 @@ func (account Account) Validate() error {
 		validation.Field(&account.WakeTime, validation.Match(regexp.MustCompile(`^(2[0-3]|[01]?[0-9]):([0-5]?[0-9])$`))),
 		validation.Field(&account.SleepTime, validation.Match(regexp.MustCompile(`^(2[0-3]|[01]?[0-9]):([0-5]?[0-9])$`))),
 		validation.Field(&account.NotificationInterval, validation.Min(0), validation.Max(24)),
+		validation.Field(&account.PhotoURL, is.URL),
 	)
 }

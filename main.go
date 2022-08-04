@@ -38,6 +38,8 @@ func main() {
 
 	accountRepo := postgres.NewAccountRepository(conn)
 	ocdLogRepo := postgres.NewOCDLogRepository(conn)
+	accountHandler := account.NewHandler(ctx, accountRepo, authClient)
+	ocdLogHandler := ocdlog.NewHandler(ctx, ocdLogRepo)
 
 	chiRouter := chi.NewRouter()
 	chiRouter.Use(
@@ -46,8 +48,8 @@ func main() {
 		middleware.NewAuthMiddleware(ctx, authClient, accountRepo).Handle,
 		middleware.NewPaginationMiddleware(ctx).Handle,
 	)
-	chiRouter.Mount("/ocdlog", ocdlog.NewRouter(ctx, ocdLogRepo))
-	chiRouter.Mount("/account", account.NewRouter(ctx, accountRepo, authClient))
+	chiRouter.Mount("/ocdlog", ocdlog.NewRouter(ocdLogHandler))
+	chiRouter.Mount("/account", account.NewRouter(accountHandler))
 	server := http.Server{
 		Addr:    fmt.Sprintf(":%s", os.Getenv("SERVER_PORT")),
 		Handler: chiRouter,

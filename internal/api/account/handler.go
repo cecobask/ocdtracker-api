@@ -47,7 +47,29 @@ func (h *handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 		api.InternalServerError(w, r, "database-error", err)
 		return
 	}
+	_, err = h.authClient.UpdateUser(r.Context(), account.ID, buildAccountUpdateParams(requestBody))
+	if err != nil {
+		api.InternalServerError(w, r, "firebase-error", err)
+		return
+	}
 	render.NoContent(w, r)
+}
+
+func buildAccountUpdateParams(account *entity.Account) *firebaseAuth.UserToUpdate {
+	params := &firebaseAuth.UserToUpdate{}
+	if account.Email != nil {
+		params.Email(*account.Email)
+	}
+	if account.DisplayName != nil {
+		params.DisplayName(*account.DisplayName)
+	}
+	if account.Password != nil {
+		params.Password(*account.Password)
+	}
+	if account.PhotoURL != nil {
+		params.PhotoURL(*account.PhotoURL)
+	}
+	return params
 }
 
 func (h *handler) GetAccount(w http.ResponseWriter, r *http.Request) {

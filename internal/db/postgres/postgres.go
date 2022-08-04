@@ -86,7 +86,7 @@ func buildCreateQuery(object interface{}, accountID string) (query *string, fiel
 	objectType, tableName := getTableName(object)
 	switch object.(type) {
 	case entity.Account:
-		fieldsAllowed = append(fieldsAllowed, "email", "display_name", "wake_time", "sleep_time", "notification_interval")
+		fieldsAllowed = append(fieldsAllowed, "email", "display_name", "wake_time", "sleep_time", "notification_interval", "photo_url")
 		fieldNames = append(fieldNames, "id")
 		fieldIndexes = append(fieldIndexes, "$1")
 		fieldValues = append(fieldValues, accountID)
@@ -135,7 +135,7 @@ func buildUpdateQuery(object interface{}, accountID string, logID *uuid.UUID) (q
 	objectType, tableName := getTableName(object)
 	switch object.(type) {
 	case entity.Account:
-		fieldsAllowed = append(fieldsAllowed, "email", "display_name", "wake_time", "sleep_time", "notification_interval")
+		fieldsAllowed = append(fieldsAllowed, "email", "display_name", "wake_time", "sleep_time", "notification_interval", "photo_url")
 		fieldValues = append(fieldValues, accountID)
 		whereClause = "id = $1"
 		jsonData, err = json.Marshal(object.(entity.Account))

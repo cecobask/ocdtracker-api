@@ -62,8 +62,10 @@ func (a *authMiddleware) Handle(next http.Handler) http.Handler {
 			switch {
 			case errors.Is(err, pgx.ErrNoRows):
 				account = &entity.Account{
-					ID:    user.UID,
-					Email: &user.Email,
+					ID:          user.UID,
+					Email:       &user.Email,
+					DisplayName: &user.DisplayName,
+					PhotoURL:    &user.PhotoURL,
 				}
 				err = a.accountRepo.CreateAccount(ctx, *account)
 				if err != nil {
