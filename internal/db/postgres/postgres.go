@@ -23,17 +23,25 @@ type Credentials struct {
 }
 
 type ConnectionConfig struct {
+	Host             string
 	DBName           string
 	Port             string
 	RetryMaxAttempts int
 	RetryDelay       time.Duration
 }
 
+type entityType string
+
+const (
+	entityTypeAccount entityType = "account"
+	entityTypeOCDLog  entityType = "ocdlog"
+)
+
 // ConnectWithConfig connects to a postgres database with custom config
 func ConnectWithConfig(ctx context.Context, credentials Credentials, connectionConfig ConnectionConfig) (*pgx.Conn, error) {
 	logger := log.LoggerFromContext(ctx)
-	connString := fmt.Sprintf("host=postgres port=%s user=%s password=%s dbname=%s sslmode=disable",
-		connectionConfig.Port, credentials.User, credentials.Password, connectionConfig.DBName,
+	connString := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=require",
+		connectionConfig.Host, connectionConfig.Port, credentials.User, credentials.Password, connectionConfig.DBName,
 	)
 	attempts := 0
 	for {
@@ -59,6 +67,7 @@ func Connect(ctx context.Context) (*pgx.Conn, error) {
 		Password: os.Getenv("POSTGRES_PASSWORD"),
 	}
 	connectionConfig := ConnectionConfig{
+		Host:             os.Getenv("POSTGRES_HOST"),
 		DBName:           os.Getenv("POSTGRES_DB"),
 		Port:             os.Getenv("POSTGRES_PORT"),
 		RetryMaxAttempts: 10,
@@ -83,25 +92,23 @@ func buildCreateQuery(object interface{}, accountID string) (query *string, fiel
 		fieldIndexes  []string
 		jsonData      []byte
 	)
-	objectType, tableName := getTableName(object)
-	switch object.(type) {
-	case entity.Account:
+	entityType, err := getEntityType(object)
+	if err != nil {
+		return nil, nil, err
+	}
+	switch entityType {
+	case entityTypeAccount:
 		fieldsAllowed = append(fieldsAllowed, "email", "display_name", "wake_time", "sleep_time", "notification_interval", "photo_url")
 		fieldNames = append(fieldNames, "id")
 		fieldIndexes = append(fieldIndexes, "$1")
 		fieldValues = append(fieldValues, accountID)
-		jsonData, err = json.Marshal(object.(entity.Account))
-	case entity.OCDLog:
+		jsonData, err = json.Marshal(object.(*entity.Account))
+	case entityTypeOCDLog:
 		fieldsAllowed = append(fieldsAllowed, "ruminate_minutes", "anxiety_level", "notes")
 		fieldNames = append(fieldNames, "account_id")
 		fieldIndexes = append(fieldIndexes, "$1")
 		fieldValues = append(fieldValues, accountID)
-		jsonData, err = json.Marshal(object.(entity.OCDLog))
-	default:
-		return nil, nil, fmt.Errorf("entity type %s not recognised", objectType)
-	}
-	if err != nil {
-		return nil, nil, err
+		jsonData, err = json.Marshal(object.(*entity.OCDLog))
 	}
 	fieldCreates := make(map[string]interface{})
 	err = json.Unmarshal(jsonData, &fieldCreates)
@@ -121,7 +128,7 @@ func buildCreateQuery(object interface{}, accountID string) (query *string, fiel
 	}
 	fieldNamesStr := strings.TrimSuffix(strings.Join(fieldNames, ", "), ",")
 	fieldIndexesStr := strings.TrimSuffix(strings.Join(fieldIndexes, ", "), ",")
-	q := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);", tableName, fieldNamesStr, fieldIndexesStr)
+	q := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);", entityType, fieldNamesStr, fieldIndexesStr)
 	return &q, fieldValues, nil
 }
 
@@ -132,23 +139,21 @@ func buildUpdateQuery(object interface{}, accountID string, logID *uuid.UUID) (q
 		whereClause   string
 		jsonData      []byte
 	)
-	objectType, tableName := getTableName(object)
-	switch object.(type) {
-	case entity.Account:
+	entityType, err := getEntityType(object)
+	if err != nil {
+		return nil, nil, err
+	}
+	switch entityType {
+	case entityTypeAccount:
 		fieldsAllowed = append(fieldsAllowed, "email", "display_name", "wake_time", "sleep_time", "notification_interval", "photo_url")
 		fieldValues = append(fieldValues, accountID)
 		whereClause = "id = $1"
-		jsonData, err = json.Marshal(object.(entity.Account))
-	case entity.OCDLog:
+		jsonData, err = json.Marshal(object.(*entity.Account))
+	case entityTypeOCDLog:
 		fieldsAllowed = append(fieldsAllowed, "ruminate_minutes", "anxiety_level", "notes")
 		fieldValues = append(fieldValues, accountID, logID)
 		whereClause = "account_id = $1 AND id = $2"
-		jsonData, err = json.Marshal(object.(entity.OCDLog))
-	default:
-		return nil, nil, fmt.Errorf("entity type %s not recognised", objectType)
-	}
-	if err != nil {
-		return nil, nil, err
+		jsonData, err = json.Marshal(object.(*entity.OCDLog))
 	}
 	fieldUpdates := make(map[string]interface{})
 	err = json.Unmarshal(jsonData, &fieldUpdates)
@@ -168,15 +173,22 @@ func buildUpdateQuery(object interface{}, accountID string, logID *uuid.UUID) (q
 	if len(fields) > 0 {
 		fields = append(fields, "updated_at = CURRENT_TIMESTAMP")
 		fieldsStr := strings.Join(fields, " ")
-		q := fmt.Sprintf("UPDATE %s SET %s WHERE %s;", tableName, fieldsStr, whereClause)
+		q := fmt.Sprintf("UPDATE %s SET %s WHERE %s;", entityType, fieldsStr, whereClause)
 		return &q, fieldValues, nil
 	}
 	return nil, nil, nil
 }
 
-func getTableName(object interface{}) (string, string) {
-	objectType := reflect.TypeOf(object).String()
-	packageName := strings.Split(objectType, ".")
-	tableName := strings.ToLower(packageName[len(packageName)-1])
-	return objectType, tableName
+func getEntityType(object interface{}) (entityType, error) {
+	entityTypeStr := reflect.TypeOf(object).String()
+	packageName := strings.Split(entityTypeStr, ".")
+	entityType := strings.ToLower(packageName[len(packageName)-1])
+	switch entityType {
+	case "account":
+		return entityTypeAccount, nil
+	case "ocdlog":
+		return entityTypeOCDLog, nil
+	default:
+		return "", fmt.Errorf("unknown entity type %s", entityTypeStr)
+	}
 }

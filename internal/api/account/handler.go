@@ -42,7 +42,7 @@ func (h *handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 		api.HandleRetrievalError(w, r, err)
 		return
 	}
-	err = h.accountRepo.UpdateAccount(r.Context(), account.ID, *requestBody)
+	err = h.accountRepo.UpdateAccount(r.Context(), account.ID, requestBody)
 	if err != nil {
 		api.InternalServerError(w, r, "database-error", err)
 		return

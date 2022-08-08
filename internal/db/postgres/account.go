@@ -15,7 +15,7 @@ type AccountRepository struct {
 var _ db.AccountRepository = (*AccountRepository)(nil)
 
 const (
-	getAccountQuery    = `SELECT id, email, created_at, updated_at, display_name, wake_time, sleep_time, notification_interval FROM account WHERE id = $1 LIMIT 1;`
+	getAccountQuery    = `SELECT id, email, created_at, updated_at, display_name, wake_time, sleep_time, notification_interval, photo_url FROM account WHERE id = $1 LIMIT 1;`
 	deleteAccountQuery = `DELETE FROM account WHERE id = $1`
 )
 
@@ -25,7 +25,7 @@ func NewAccountRepository(conn *pgx.Conn) *AccountRepository {
 	}
 }
 
-func (repo *AccountRepository) CreateAccount(ctx context.Context, account entity.Account) error {
+func (repo *AccountRepository) CreateAccount(ctx context.Context, account *entity.Account) error {
 	query, fieldValues, err := buildCreateQuery(account, account.ID)
 	if err != nil {
 		return err
@@ -37,7 +37,7 @@ func (repo *AccountRepository) CreateAccount(ctx context.Context, account entity
 	return nil
 }
 
-func (repo *AccountRepository) UpdateAccount(ctx context.Context, id string, account entity.Account) error {
+func (repo *AccountRepository) UpdateAccount(ctx context.Context, id string, account *entity.Account) error {
 	query, fieldValues, err := buildUpdateQuery(account, id, nil)
 	if err != nil {
 		return err

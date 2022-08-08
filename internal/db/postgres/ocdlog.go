@@ -74,7 +74,7 @@ func (repo *OCDLogRepository) GetLog(ctx context.Context, accountID string, id u
 	return &ocdLog, nil
 }
 
-func (repo *OCDLogRepository) CreateLog(ctx context.Context, accountID string, ocdLog entity.OCDLog) error {
+func (repo *OCDLogRepository) CreateLog(ctx context.Context, accountID string, ocdLog *entity.OCDLog) error {
 	query, fieldValues, err := buildCreateQuery(ocdLog, accountID)
 	if err != nil {
 		return err
@@ -86,7 +86,7 @@ func (repo *OCDLogRepository) CreateLog(ctx context.Context, accountID string, o
 	return nil
 }
 
-func (repo *OCDLogRepository) UpdateLog(ctx context.Context, accountID string, id uuid.UUID, ocdLog entity.OCDLog) error {
+func (repo *OCDLogRepository) UpdateLog(ctx context.Context, accountID string, id uuid.UUID, ocdLog *entity.OCDLog) error {
 	query, fieldValues, err := buildUpdateQuery(ocdLog, accountID, &id)
 	if err != nil {
 		return err

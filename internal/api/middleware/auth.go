@@ -67,7 +67,7 @@ func (a *authMiddleware) Handle(next http.Handler) http.Handler {
 					DisplayName: &user.DisplayName,
 					PhotoURL:    &user.PhotoURL,
 				}
-				err = a.accountRepo.CreateAccount(ctx, *account)
+				err = a.accountRepo.CreateAccount(ctx, account)
 				if err != nil {
 					api.InternalServerError(w, r, "database-error", err)
 					return

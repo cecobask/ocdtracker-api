@@ -94,7 +94,7 @@ func (h *handler) UpdateLog(w http.ResponseWriter, r *http.Request) {
 		api.HandleRetrievalError(w, r, err)
 		return
 	}
-	err = h.ocdLogRepo.UpdateLog(r.Context(), account.ID, id, *requestBody)
+	err = h.ocdLogRepo.UpdateLog(r.Context(), account.ID, id, requestBody)
 	if err != nil {
 		api.InternalServerError(w, r, "database-error", err)
 		return
@@ -112,7 +112,7 @@ func (h *handler) CreateLog(w http.ResponseWriter, r *http.Request) {
 		api.InternalServerError(w, r, "invalid-account-ctx", err)
 		return
 	}
-	err = h.ocdLogRepo.CreateLog(r.Context(), account.ID, *requestBody)
+	err = h.ocdLogRepo.CreateLog(r.Context(), account.ID, requestBody)
 	if err != nil {
 		api.InternalServerError(w, r, "database-error", err)
 		return
