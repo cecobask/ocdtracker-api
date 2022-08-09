@@ -2,17 +2,17 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"github.com/cecobask/ocd-tracker-api/internal/db"
 	"github.com/cecobask/ocd-tracker-api/pkg/entity"
 	"github.com/cecobask/ocd-tracker-api/pkg/log"
-	"github.com/georgysavva/scany/pgxscan"
+	"github.com/georgysavva/scany/sqlscan"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v4"
 )
 
 type OCDLogRepository struct {
-	Connection *pgx.Conn
+	Connection *sql.Conn
 }
 
 var _ db.OCDLogRepository = (*OCDLogRepository)(nil)
@@ -25,7 +25,7 @@ const (
 	getRowCountQuery   = `SELECT count(*) FROM ocdlog WHERE account_id = $1;`
 )
 
-func NewOCDLogRepository(conn *pgx.Conn) *OCDLogRepository {
+func NewOCDLogRepository(conn *sql.Conn) *OCDLogRepository {
 	return &OCDLogRepository{
 		Connection: conn,
 	}
@@ -36,7 +36,7 @@ func (repo *OCDLogRepository) GetAllLogs(ctx context.Context, accountID string, 
 		Logs: make([]entity.OCDLog, 0),
 	}
 	var rowCount int
-	err := pgxscan.Get(ctx, repo.Connection, &rowCount, getRowCountQuery, accountID)
+	err := sqlscan.Get(ctx, repo.Connection, &rowCount, getRowCountQuery, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func (repo *OCDLogRepository) GetAllLogs(ctx context.Context, accountID string, 
 		Total:  rowCount,
 	}
 	var ocdLogs []entity.OCDLog
-	err = pgxscan.Select(ctx, repo.Connection, &ocdLogs, getAllLogsQuery, accountID, limit, offset)
+	err = sqlscan.Select(ctx, repo.Connection, &ocdLogs, getAllLogsQuery, accountID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (repo *OCDLogRepository) DeleteAllLogs(ctx context.Context, accountID strin
 
 func (repo *OCDLogRepository) GetLog(ctx context.Context, accountID string, id uuid.UUID) (*entity.OCDLog, error) {
 	ocdLog := entity.OCDLog{}
-	err := pgxscan.Get(ctx, repo.Connection, &ocdLog, getLogQuery, accountID, id)
+	err := sqlscan.Get(ctx, repo.Connection, &ocdLog, getLogQuery, accountID, id)
 	if err != nil {
 		return nil, err
 	}

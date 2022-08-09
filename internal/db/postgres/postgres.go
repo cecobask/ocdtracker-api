@@ -2,13 +2,16 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/cecobask/ocd-tracker-api/pkg/entity"
 	"github.com/cecobask/ocd-tracker-api/pkg/log"
+	"github.com/golang-migrate/migrate/v4"
+	pgMigrate "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v4"
 	"go.uber.org/zap"
 	"reflect"
 	"strings"
@@ -37,31 +40,35 @@ const (
 	entityTypeOCDLog  entityType = "ocdlog"
 )
 
-// ConnectWithConfig connects to a postgres database with custom config
-func ConnectWithConfig(ctx context.Context, credentials Credentials, connectionConfig ConnectionConfig) (*pgx.Conn, error) {
+// ConnectWithConfig connects to a database with custom config
+func ConnectWithConfig(ctx context.Context, credentials Credentials, connectionConfig ConnectionConfig) (*sql.Conn, error) {
 	logger := log.LoggerFromContext(ctx)
 	connString := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=require",
 		connectionConfig.Host, connectionConfig.Port, credentials.User, credentials.Password, connectionConfig.DBName,
 	)
+	db, err := sql.Open("postgres", connString)
+	if err != nil {
+		return nil, err
+	}
 	attempts := 0
 	for {
 		attempts++
 		if attempts == connectionConfig.RetryMaxAttempts {
-			return nil, errors.New("reached max postgres connection retry attempts")
+			return nil, fmt.Errorf("reached max database connection retry attempts")
 		}
-		postgresConn, err := pgx.Connect(ctx, connString)
+		conn, err := db.Conn(ctx)
 		if err != nil {
-			logger.Debug("failed attempt to establish postgres connection", zap.Int("attempts", attempts), zap.Error(err))
+			logger.Debug("failed attempt to establish database connection", zap.Int("attempts", attempts), zap.Error(err))
 			time.Sleep(connectionConfig.RetryDelay)
 			continue
 		}
-		logger.Info("established postgres connection")
-		return postgresConn, nil
+		logger.Info("established database connection")
+		return conn, nil
 	}
 }
 
-// Connect connects to a postgres database with default config
-func Connect(ctx context.Context) (*pgx.Conn, error) {
+// Connect connects to a database with default config
+func Connect(ctx context.Context) (*sql.Conn, error) {
 	credentials := Credentials{
 		User:     os.Getenv("POSTGRES_USER"),
 		Password: os.Getenv("POSTGRES_PASSWORD"),
@@ -76,12 +83,31 @@ func Connect(ctx context.Context) (*pgx.Conn, error) {
 	return ConnectWithConfig(ctx, credentials, connectionConfig)
 }
 
-func logExec(ctx context.Context, conn *pgx.Conn, query, action string, args ...interface{}) error {
-	commandTag, err := conn.Exec(ctx, query, args...)
+func Migrate(ctx context.Context, conn *sql.Conn) error {
+	driver, err := pgMigrate.WithConnection(ctx, conn, &pgMigrate.Config{})
+	if err != nil {
+		return fmt.Errorf("failed to link database and migrator: %w", err)
+	}
+	instance, err := migrate.NewWithDatabaseInstance("file:///migration", "postgres", driver)
+	if err != nil {
+		return fmt.Errorf("failed to initialise database migrator: %w", err)
+	}
+	if !errors.Is(instance.Up(), migrate.ErrNoChange) {
+		return fmt.Errorf("failed to migrate database to latest version: %w", err)
+	}
+	return nil
+}
+
+func logExec(ctx context.Context, db *sql.Conn, query, action string, args ...interface{}) error {
+	result, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
-	log.LoggerFromContext(ctx).Info(fmt.Sprintf("%sd %d record/s", action, commandTag.RowsAffected()))
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	log.LoggerFromContext(ctx).Info(fmt.Sprintf("%sd %d record/s", action, rowsAffected))
 	return nil
 }
 

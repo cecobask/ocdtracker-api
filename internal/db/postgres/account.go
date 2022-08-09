@@ -2,14 +2,14 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"github.com/cecobask/ocd-tracker-api/internal/db"
 	"github.com/cecobask/ocd-tracker-api/pkg/entity"
-	"github.com/georgysavva/scany/pgxscan"
-	"github.com/jackc/pgx/v4"
+	"github.com/georgysavva/scany/sqlscan"
 )
 
 type AccountRepository struct {
-	Connection *pgx.Conn
+	Connection *sql.Conn
 }
 
 var _ db.AccountRepository = (*AccountRepository)(nil)
@@ -19,7 +19,7 @@ const (
 	deleteAccountQuery = `DELETE FROM account WHERE id = $1`
 )
 
-func NewAccountRepository(conn *pgx.Conn) *AccountRepository {
+func NewAccountRepository(conn *sql.Conn) *AccountRepository {
 	return &AccountRepository{
 		Connection: conn,
 	}
@@ -53,7 +53,7 @@ func (repo *AccountRepository) UpdateAccount(ctx context.Context, id string, acc
 
 func (repo *AccountRepository) GetAccount(ctx context.Context, id string) (*entity.Account, error) {
 	account := entity.Account{}
-	err := pgxscan.Get(ctx, repo.Connection, &account, getAccountQuery, id)
+	err := sqlscan.Get(ctx, repo.Connection, &account, getAccountQuery, id)
 	if err != nil {
 		return nil, err
 	}

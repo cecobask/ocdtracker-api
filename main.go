@@ -22,9 +22,17 @@ func main() {
 	ctx := log.ContextWithLogger(context.Background(), logger)
 	conn, err := postgres.Connect(ctx)
 	if err != nil {
-		logger.Fatal("failed to connect postgres", zap.Error(err))
+		logger.Fatal("failed to connect to database", zap.Error(err))
 	}
-	defer conn.Close(context.Background())
+	defer func() {
+		if err := conn.Close(); err != nil {
+			logger.Fatal("failed to close database connection", zap.Error(err))
+		}
+	}()
+	err = postgres.Migrate(ctx, conn)
+	if err != nil {
+		logger.Fatal("failed to migrate database", zap.Error(err))
+	}
 
 	config := firebase.Config{ProjectID: os.Getenv("FIREBASE_PROJECT_ID")}
 	firebaseApp, err := firebase.NewApp(ctx, &config)

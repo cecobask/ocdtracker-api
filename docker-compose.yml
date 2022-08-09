@@ -1,20 +1,5 @@
 version: "3.8"
 services:
-  migrate:
-    image: migrate/migrate
-    restart: on-failure
-    env_file:
-      - .env
-    volumes:
-      - ./internal/db/postgres/migration:/migration
-    command:
-      [
-        "-path",
-        "/migration",
-        "-database",
-        "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=require",
-        "up"
-      ]
   api:
     restart: on-failure
     build:
@@ -22,9 +7,6 @@ services:
       dockerfile: ${DOCKERFILE:-Dockerfile}
     env_file:
       - .env
-    depends_on:
-      - postgres
-      - migrate
     volumes:
       - ${SERVICE_ACCOUNT_FILE}:/tmp/keys/serviceAccountKey.json:ro
     ports:
