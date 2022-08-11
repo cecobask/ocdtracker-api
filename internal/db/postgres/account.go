@@ -9,7 +9,7 @@ import (
 )
 
 type AccountRepository struct {
-	Connection *sql.Conn
+	DB *sql.DB
 }
 
 var _ db.AccountRepository = (*AccountRepository)(nil)
@@ -19,18 +19,18 @@ const (
 	deleteAccountQuery = `DELETE FROM account WHERE id = $1`
 )
 
-func NewAccountRepository(conn *sql.Conn) *AccountRepository {
+func NewAccountRepository(db *sql.DB) *AccountRepository {
 	return &AccountRepository{
-		Connection: conn,
+		DB: db,
 	}
 }
 
 func (repo *AccountRepository) CreateAccount(ctx context.Context, account *entity.Account) error {
-	query, fieldValues, err := buildCreateQuery(account, account.ID)
+	pgElems, err := buildCreateQuery(account, account.ID)
 	if err != nil {
 		return err
 	}
-	err = logExec(ctx, repo.Connection, *query, "create", fieldValues...)
+	err = logExec(ctx, repo.DB, pgElems.query, "create", pgElems.fieldValues...)
 	if err != nil {
 		return err
 	}
@@ -38,12 +38,12 @@ func (repo *AccountRepository) CreateAccount(ctx context.Context, account *entit
 }
 
 func (repo *AccountRepository) UpdateAccount(ctx context.Context, id string, account *entity.Account) error {
-	query, fieldValues, err := buildUpdateQuery(account, id, nil)
+	pgElems, err := buildUpdateQuery(account, id, nil)
 	if err != nil {
 		return err
 	}
-	if query != nil && fieldValues != nil {
-		err = logExec(ctx, repo.Connection, *query, "update", fieldValues...)
+	if pgElems != nil {
+		err = logExec(ctx, repo.DB, pgElems.query, "update", pgElems.fieldValues...)
 		if err != nil {
 			return err
 		}
@@ -53,7 +53,7 @@ func (repo *AccountRepository) UpdateAccount(ctx context.Context, id string, acc
 
 func (repo *AccountRepository) GetAccount(ctx context.Context, id string) (*entity.Account, error) {
 	account := entity.Account{}
-	err := sqlscan.Get(ctx, repo.Connection, &account, getAccountQuery, id)
+	err := sqlscan.Get(ctx, repo.DB, &account, getAccountQuery, id)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func (repo *AccountRepository) GetAccount(ctx context.Context, id string) (*enti
 }
 
 func (repo *AccountRepository) DeleteAccount(ctx context.Context, id string) error {
-	err := logExec(ctx, repo.Connection, deleteAccountQuery, "delete", id)
+	err := logExec(ctx, repo.DB, deleteAccountQuery, "delete", id)
 	if err != nil {
 		return err
 	}

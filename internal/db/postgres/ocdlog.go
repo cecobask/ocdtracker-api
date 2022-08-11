@@ -12,7 +12,7 @@ import (
 )
 
 type OCDLogRepository struct {
-	Connection *sql.Conn
+	DB *sql.DB
 }
 
 var _ db.OCDLogRepository = (*OCDLogRepository)(nil)
@@ -25,9 +25,9 @@ const (
 	getRowCountQuery   = `SELECT count(*) FROM ocdlog WHERE account_id = $1;`
 )
 
-func NewOCDLogRepository(conn *sql.Conn) *OCDLogRepository {
+func NewOCDLogRepository(db *sql.DB) *OCDLogRepository {
 	return &OCDLogRepository{
-		Connection: conn,
+		DB: db,
 	}
 }
 
@@ -36,7 +36,7 @@ func (repo *OCDLogRepository) GetAllLogs(ctx context.Context, accountID string, 
 		Logs: make([]entity.OCDLog, 0),
 	}
 	var rowCount int
-	err := sqlscan.Get(ctx, repo.Connection, &rowCount, getRowCountQuery, accountID)
+	err := sqlscan.Get(ctx, repo.DB, &rowCount, getRowCountQuery, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func (repo *OCDLogRepository) GetAllLogs(ctx context.Context, accountID string, 
 		Total:  rowCount,
 	}
 	var ocdLogs []entity.OCDLog
-	err = sqlscan.Select(ctx, repo.Connection, &ocdLogs, getAllLogsQuery, accountID, limit, offset)
+	err = sqlscan.Select(ctx, repo.DB, &ocdLogs, getAllLogsQuery, accountID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func (repo *OCDLogRepository) GetAllLogs(ctx context.Context, accountID string, 
 }
 
 func (repo *OCDLogRepository) DeleteAllLogs(ctx context.Context, accountID string) error {
-	err := logExec(ctx, repo.Connection, deleteAllLogsQuery, "delete", accountID)
+	err := logExec(ctx, repo.DB, deleteAllLogsQuery, "delete", accountID)
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (repo *OCDLogRepository) DeleteAllLogs(ctx context.Context, accountID strin
 
 func (repo *OCDLogRepository) GetLog(ctx context.Context, accountID string, id uuid.UUID) (*entity.OCDLog, error) {
 	ocdLog := entity.OCDLog{}
-	err := sqlscan.Get(ctx, repo.Connection, &ocdLog, getLogQuery, accountID, id)
+	err := sqlscan.Get(ctx, repo.DB, &ocdLog, getLogQuery, accountID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -75,11 +75,11 @@ func (repo *OCDLogRepository) GetLog(ctx context.Context, accountID string, id u
 }
 
 func (repo *OCDLogRepository) CreateLog(ctx context.Context, accountID string, ocdLog *entity.OCDLog) error {
-	query, fieldValues, err := buildCreateQuery(ocdLog, accountID)
+	pgElems, err := buildCreateQuery(ocdLog, accountID)
 	if err != nil {
 		return err
 	}
-	err = logExec(ctx, repo.Connection, *query, "create", fieldValues...)
+	err = logExec(ctx, repo.DB, pgElems.query, "create", pgElems.fieldValues...)
 	if err != nil {
 		return err
 	}
@@ -87,12 +87,12 @@ func (repo *OCDLogRepository) CreateLog(ctx context.Context, accountID string, o
 }
 
 func (repo *OCDLogRepository) UpdateLog(ctx context.Context, accountID string, id uuid.UUID, ocdLog *entity.OCDLog) error {
-	query, fieldValues, err := buildUpdateQuery(ocdLog, accountID, &id)
+	pgElems, err := buildUpdateQuery(ocdLog, accountID, &id)
 	if err != nil {
 		return err
 	}
-	if query != nil && fieldValues != nil {
-		err = logExec(ctx, repo.Connection, *query, "update", fieldValues...)
+	if pgElems != nil {
+		err = logExec(ctx, repo.DB, pgElems.query, "update", pgElems.fieldValues...)
 		if err != nil {
 			return err
 		}
@@ -101,7 +101,7 @@ func (repo *OCDLogRepository) UpdateLog(ctx context.Context, accountID string, i
 }
 
 func (repo *OCDLogRepository) DeleteLog(ctx context.Context, accountID string, id uuid.UUID) error {
-	err := logExec(ctx, repo.Connection, deleteLogQuery, "delete", accountID, id)
+	err := logExec(ctx, repo.DB, deleteLogQuery, "delete", accountID, id)
 	if err != nil {
 		return err
 	}

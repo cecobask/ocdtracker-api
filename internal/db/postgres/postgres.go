@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/cecobask/ocd-tracker-api/internal/aws"
 	"github.com/cecobask/ocd-tracker-api/pkg/entity"
 	"github.com/cecobask/ocd-tracker-api/pkg/log"
 	"github.com/golang-migrate/migrate/v4"
@@ -14,9 +15,9 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"reflect"
+	"strconv"
 	"strings"
 
-	"os"
 	"time"
 )
 
@@ -33,6 +34,11 @@ type ConnectionConfig struct {
 	RetryDelay       time.Duration
 }
 
+type postgresElements struct {
+	query       string
+	fieldValues []interface{}
+}
+
 type entityType string
 
 const (
@@ -41,14 +47,14 @@ const (
 )
 
 // ConnectWithConfig connects to a database with custom config
-func ConnectWithConfig(ctx context.Context, credentials Credentials, connectionConfig ConnectionConfig) (*sql.Conn, error) {
+func ConnectWithConfig(ctx context.Context, credentials Credentials, connectionConfig ConnectionConfig) (*sql.DB, error) {
 	logger := log.LoggerFromContext(ctx)
 	connString := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=require",
 		connectionConfig.Host, connectionConfig.Port, credentials.User, credentials.Password, connectionConfig.DBName,
 	)
 	db, err := sql.Open("postgres", connString)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to prepare database: %w", err)
 	}
 	attempts := 0
 	for {
@@ -56,35 +62,35 @@ func ConnectWithConfig(ctx context.Context, credentials Credentials, connectionC
 		if attempts == connectionConfig.RetryMaxAttempts {
 			return nil, fmt.Errorf("reached max database connection retry attempts")
 		}
-		conn, err := db.Conn(ctx)
+		err := db.Ping()
 		if err != nil {
 			logger.Debug("failed attempt to establish database connection", zap.Int("attempts", attempts), zap.Error(err))
 			time.Sleep(connectionConfig.RetryDelay)
 			continue
 		}
 		logger.Info("established database connection")
-		return conn, nil
+		return db, nil
 	}
 }
 
 // Connect connects to a database with default config
-func Connect(ctx context.Context) (*sql.Conn, error) {
+func Connect(ctx context.Context, postgresCredsSecret *aws.PostgresCredsSecret) (*sql.DB, error) {
 	credentials := Credentials{
-		User:     os.Getenv("POSTGRES_USER"),
-		Password: os.Getenv("POSTGRES_PASSWORD"),
+		User:     postgresCredsSecret.Username,
+		Password: postgresCredsSecret.Password,
 	}
 	connectionConfig := ConnectionConfig{
-		Host:             os.Getenv("POSTGRES_HOST"),
-		DBName:           os.Getenv("POSTGRES_DB"),
-		Port:             os.Getenv("POSTGRES_PORT"),
+		Host:             postgresCredsSecret.Host,
+		DBName:           postgresCredsSecret.DBName,
+		Port:             strconv.Itoa(postgresCredsSecret.Port),
 		RetryMaxAttempts: 10,
 		RetryDelay:       time.Second * 5,
 	}
 	return ConnectWithConfig(ctx, credentials, connectionConfig)
 }
 
-func Migrate(ctx context.Context, conn *sql.Conn) error {
-	driver, err := pgMigrate.WithConnection(ctx, conn, &pgMigrate.Config{})
+func Migrate(db *sql.DB) error {
+	driver, err := pgMigrate.WithInstance(db, &pgMigrate.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to link database and migrator: %w", err)
 	}
@@ -92,13 +98,14 @@ func Migrate(ctx context.Context, conn *sql.Conn) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialise database migrator: %w", err)
 	}
-	if !errors.Is(instance.Up(), migrate.ErrNoChange) {
+	err = instance.Up()
+	if !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("failed to migrate database to latest version: %w", err)
 	}
 	return nil
 }
 
-func logExec(ctx context.Context, db *sql.Conn, query, action string, args ...interface{}) error {
+func logExec(ctx context.Context, db *sql.DB, query, action string, args ...interface{}) error {
 	result, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
@@ -111,35 +118,32 @@ func logExec(ctx context.Context, db *sql.Conn, query, action string, args ...in
 	return nil
 }
 
-func buildCreateQuery(object interface{}, accountID string) (query *string, fieldValues []interface{}, err error) {
+func buildCreateQuery(object interface{}, accountID string) (*postgresElements, error) {
 	var (
 		fieldsAllowed []string
 		fieldNames    []string
-		fieldIndexes  []string
 		jsonData      []byte
 	)
 	entityType, err := getEntityType(object)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	switch entityType {
 	case entityTypeAccount:
 		fieldsAllowed = append(fieldsAllowed, "email", "display_name", "wake_time", "sleep_time", "notification_interval", "photo_url")
 		fieldNames = append(fieldNames, "id")
-		fieldIndexes = append(fieldIndexes, "$1")
-		fieldValues = append(fieldValues, accountID)
 		jsonData, err = json.Marshal(object.(*entity.Account))
 	case entityTypeOCDLog:
 		fieldsAllowed = append(fieldsAllowed, "ruminate_minutes", "anxiety_level", "notes")
 		fieldNames = append(fieldNames, "account_id")
-		fieldIndexes = append(fieldIndexes, "$1")
-		fieldValues = append(fieldValues, accountID)
 		jsonData, err = json.Marshal(object.(*entity.OCDLog))
 	}
+	fieldValues := []interface{}{accountID}
+	fieldIndexes := []string{"$1"}
 	fieldCreates := make(map[string]interface{})
 	err = json.Unmarshal(jsonData, &fieldCreates)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	index := len(fieldNames) + 1 // start at x because of reserved field/s
 	for _, allowedField := range fieldsAllowed {
@@ -155,19 +159,20 @@ func buildCreateQuery(object interface{}, accountID string) (query *string, fiel
 	fieldNamesStr := strings.TrimSuffix(strings.Join(fieldNames, ", "), ",")
 	fieldIndexesStr := strings.TrimSuffix(strings.Join(fieldIndexes, ", "), ",")
 	q := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);", entityType, fieldNamesStr, fieldIndexesStr)
-	return &q, fieldValues, nil
+	return &postgresElements{query: q, fieldValues: fieldValues}, nil
 }
 
-func buildUpdateQuery(object interface{}, accountID string, logID *uuid.UUID) (query *string, fieldValues []interface{}, err error) {
+func buildUpdateQuery(object interface{}, accountID string, logID *uuid.UUID) (*postgresElements, error) {
 	var (
 		fieldsAllowed []string
 		fields        []string
+		fieldValues   []interface{}
 		whereClause   string
 		jsonData      []byte
 	)
 	entityType, err := getEntityType(object)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	switch entityType {
 	case entityTypeAccount:
@@ -184,7 +189,7 @@ func buildUpdateQuery(object interface{}, accountID string, logID *uuid.UUID) (q
 	fieldUpdates := make(map[string]interface{})
 	err = json.Unmarshal(jsonData, &fieldUpdates)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	index := len(fieldValues) + 1 // start at x because of reserved field/s
 	for _, allowedField := range fieldsAllowed {
@@ -200,9 +205,9 @@ func buildUpdateQuery(object interface{}, accountID string, logID *uuid.UUID) (q
 		fields = append(fields, "updated_at = CURRENT_TIMESTAMP")
 		fieldsStr := strings.Join(fields, " ")
 		q := fmt.Sprintf("UPDATE %s SET %s WHERE %s;", entityType, fieldsStr, whereClause)
-		return &q, fieldValues, nil
+		return &postgresElements{query: q, fieldValues: fieldValues}, nil
 	}
-	return nil, nil, nil
+	return nil, nil // no action
 }
 
 func getEntityType(object interface{}) (entityType, error) {

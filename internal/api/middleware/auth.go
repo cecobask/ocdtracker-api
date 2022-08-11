@@ -2,13 +2,13 @@ package middleware
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	firebaseAuth "firebase.google.com/go/v4/auth"
 	"github.com/cecobask/ocd-tracker-api/internal/api"
 	"github.com/cecobask/ocd-tracker-api/internal/db/postgres"
 	"github.com/cecobask/ocd-tracker-api/pkg/entity"
 	"github.com/cecobask/ocd-tracker-api/pkg/log"
-	"github.com/jackc/pgx/v4"
 	"go.uber.org/zap"
 	"net/http"
 	"strings"
@@ -60,7 +60,7 @@ func (a *authMiddleware) Handle(next http.Handler) http.Handler {
 		account, err := a.accountRepo.GetAccount(ctx, user.UID)
 		if err != nil {
 			switch {
-			case errors.Is(err, pgx.ErrNoRows):
+			case errors.Is(err, sql.ErrNoRows):
 				account = &entity.Account{
 					ID:          user.UID,
 					Email:       &user.Email,

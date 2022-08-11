@@ -1,10 +1,10 @@
 package api
 
 import (
+	"database/sql"
 	"errors"
 	"github.com/cecobask/ocd-tracker-api/pkg/log"
 	"github.com/go-chi/render"
-	"github.com/jackc/pgx/v4"
 	"go.uber.org/zap"
 	"net/http"
 )
@@ -43,8 +43,8 @@ type ErrorResponse struct {
 
 func HandleRetrievalError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		NotFoundError(w, r, "database-error", err)
+	case errors.Is(err, sql.ErrNoRows):
+		NotFoundError(w, r, "database-error", sql.ErrNoRows)
 	default:
 		InternalServerError(w, r, "database-error", err)
 	}

@@ -7,10 +7,8 @@ services:
       dockerfile: ${DOCKERFILE:-Dockerfile}
     env_file:
       - .env
-    volumes:
-      - ${SERVICE_ACCOUNT_FILE}:/tmp/keys/serviceAccountKey.json:ro
     ports:
-      - "${SERVER_PORT}:${SERVER_PORT}"
+      - "8080:8080"
       - "40000:40000"
     security_opt:
       - "seccomp:unconfined"
