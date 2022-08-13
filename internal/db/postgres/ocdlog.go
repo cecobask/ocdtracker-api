@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/cecobask/ocd-tracker-api/internal/db"
-	"github.com/cecobask/ocd-tracker-api/pkg/entity"
-	"github.com/cecobask/ocd-tracker-api/pkg/log"
+	"github.com/cecobask/ocdtracker-api/internal/db"
+	"github.com/cecobask/ocdtracker-api/pkg/entity"
+	"github.com/cecobask/ocdtracker-api/pkg/log"
 	"github.com/georgysavva/scany/sqlscan"
 	"github.com/google/uuid"
 )

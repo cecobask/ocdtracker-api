@@ -2,7 +2,7 @@ package db
 
 import (
 	"context"
-	"github.com/cecobask/ocd-tracker-api/pkg/entity"
+	"github.com/cecobask/ocdtracker-api/pkg/entity"
 	"github.com/google/uuid"
 )
 

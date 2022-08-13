@@ -3,7 +3,7 @@ package api
 import (
 	"database/sql"
 	"errors"
-	"github.com/cecobask/ocd-tracker-api/pkg/log"
+	"github.com/cecobask/ocdtracker-api/pkg/log"
 	"github.com/go-chi/render"
 	"go.uber.org/zap"
 	"net/http"

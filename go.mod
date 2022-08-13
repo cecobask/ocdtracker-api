@@ -1,4 +1,4 @@
-module github.com/cecobask/ocd-tracker-api
+module github.com/cecobask/ocdtracker-api
 
 go 1.18
 
