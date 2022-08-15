@@ -18,14 +18,14 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v1
       with:
         role-to-assume: arn:aws:iam::664951498024:role/ocdtracker-github-actions
-        aws-region: eu-west-2
+        aws-region: eu-west-1
     - name: Log in to AWS ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
     - name: Build, tag and push docker image to AWS ECR
       env:
         REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        REPOSITORY: ocdtracker
+        REPOSITORY: ocdtracker-api
       run: |
         docker build -t $REGISTRY/$REPOSITORY:latest .
         docker push $REGISTRY/$REPOSITORY:latest

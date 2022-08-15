@@ -41,7 +41,7 @@ type GoogleAppCredsSecret struct {
 const (
 	secretNameGoogleAppCreds = "ocdtracker-google-app-creds"
 	secretNamePostgresCreds  = "ocdtracker-postgres-creds"
-	defaultRegion            = "eu-west-2"
+	defaultRegion            = "eu-west-1"
 )
 
 func NewSecretsManager(sess *session.Session) *SecretsManager {
