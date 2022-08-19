@@ -1,0 +1,371 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  EC2VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+
+  EC2InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+
+  EC2VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      InternetGatewayId: !Ref EC2InternetGateway
+      VpcId: !Ref EC2VPC
+
+  EC2Subnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: eu-west-1a
+      CidrBlock: 10.0.32.0/20
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+      VpcId: !Ref EC2VPC
+
+  EC2Subnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: eu-west-1b
+      CidrBlock: 10.0.0.0/20
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+      VpcId: !Ref EC2VPC
+
+  EC2Subnet3:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: eu-west-1c
+      CidrBlock: 10.0.16.0/20
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+      VpcId: !Ref EC2VPC
+
+  EC2RouteTablePublic:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+      VpcId: !Ref EC2VPC
+
+  EC2RoutePublic:
+    Type: 'AWS::EC2::Route'
+    DependsOn: EC2VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref EC2RouteTablePublic
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref EC2InternetGateway
+
+  EC2SubnetRouteTableAssociationPublicSubnet1:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref EC2RouteTablePublic
+      SubnetId: !Ref EC2Subnet1
+
+  EC2SubnetRouteTableAssociationPublicSubnet2:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref EC2RouteTablePublic
+      SubnetId: !Ref EC2Subnet2
+
+  EC2SubnetRouteTableAssociationPublicSubnet3:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref EC2RouteTablePublic
+      SubnetId: !Ref EC2Subnet3
+
+  EC2SecurityGroupWebServer:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Allow SSH and 8080 access from anywhere
+      GroupName: ocdtracker-api
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+      VpcId: !Ref EC2VPC
+
+  RDSDBSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: AWS::RDS::DBSubnetGroup
+      SubnetIds:
+        - !Ref EC2Subnet1
+        - !Ref EC2Subnet2
+        - !Ref EC2Subnet3
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+
+  SecretsManagerSecretTargetAttachment:
+    Type: 'AWS::SecretsManager::SecretTargetAttachment'
+    Properties:
+      SecretId: !Ref SecretsManagerSecretPostgresCreds
+      TargetId: !Ref RDSDBInstance
+      TargetType: 'AWS::RDS::DBInstance'
+
+  RDSDBInstance:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      AllocatedStorage: 20
+      AvailabilityZone: eu-west-1a
+      BackupRetentionPeriod: 2
+      CACertificateIdentifier: rds-ca-2019
+      CopyTagsToSnapshot: true
+      DBInstanceClass: db.t3.micro
+      DBInstanceIdentifier: ocdtracker-api
+      DBName: ocdtracker
+      DBSubnetGroupName: !Ref RDSDBSubnetGroup
+      DeleteAutomatedBackups: true
+      Engine: postgres
+      EngineVersion: 14.4
+      MasterUsername: !Sub '{{resolve:secretsmanager:${  SecretsManagerSecretPostgresCreds}::username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${SecretsManagerSecretPostgresCreds}::password}}'
+      MaxAllocatedStorage: 25
+      PreferredBackupWindow: '23:03-23:33'
+      PreferredMaintenanceWindow: 'tue:03:19-tue:03:49'
+      PubliclyAccessible: true
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+      VPCSecurityGroups:
+        - !GetAtt EC2SecurityGroupPostgres.GroupId
+
+  EC2SecurityGroupPostgres:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Allow Postgres access
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+      VpcId: !Ref EC2VPC
+
+  EC2Instance:
+    Type: 'AWS::EC2::Instance'
+    DependsOn: RDSDBInstance
+    Properties:
+      AvailabilityZone: eu-west-1a
+      IamInstanceProfile: !Ref IAMInstanceProfile
+      ImageId: ami-089950bc622d39ed8
+      InstanceType: t2.micro
+      PropagateTagsToVolumeOnCreation: true
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroupWebServer
+      SubnetId: !Ref EC2Subnet1
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          amazon-linux-extras install docker -y
+          service docker start
+          usermod -aG docker ec2-user
+          chmod 666 /var/run/docker.sock
+          systemctl enable docker
+          AWS_ACCOUNT_ID=$(curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | awk -F'"' '/"accountId"/ { print $4 }')
+          AWS_REGION=$(curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | grep region | awk -F\" '{print $4}')
+          REPO_URL=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/ocdtracker-api
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $REPO_URL
+          IMAGE=$REPO_URL:latest
+          docker pull $IMAGE
+          if [ $? -eq 1 ]; then
+            yum install git -y
+            mkdir ocdtracker-api
+            cd ocdtracker-api
+            git clone https://github.com/cecobask/ocdtracker-api.git .
+            docker build -t $IMAGE .
+          fi
+          docker run --name ocdtracker-api -d -p 8080:8080 $IMAGE
+
+  IAMInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      InstanceProfileName: ocdtracker-api
+      Path: /
+      Roles:
+        - !Ref IAMRoleOCDTrackerAPI
+
+  IAMRoleOCDTrackerAPI:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+      MaxSessionDuration: 3600
+      Path: /
+      RoleName: ocdtracker-api
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+
+  IAMRoleGithubActions:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !GetAtt IAMOIDCProviderGithubActions.Arn
+            Action: 'sts:AssumeRoleWithWebIdentity'
+            Condition:
+              StringEquals:
+                'token.actions.githubusercontent.com:sub': 'repo:cecobask/ocdtracker-api:ref:refs/heads/main'
+                'token.actions.githubusercontent.com:aud': sts.amazonaws.com
+      MaxSessionDuration: 3600
+      Path: /
+      RoleName: github-actions
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+
+  SecretsManagerSecretGoogleAppCreds:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: google-app-creds
+      SecretString: dummy
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+
+  SecretsManagerSecretPostgresCreds:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      GenerateSecretString:
+        ExcludeCharacters: '"@/\'
+        GenerateStringKey: password
+        PasswordLength: 32
+        RequireEachIncludedType: true
+        SecretStringTemplate: '{"username": "postgres"}'
+      Name: postgres-creds
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+
+  IAMPolicyOCDTrackerAPI:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: 'ecr:GetAuthorizationToken'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'secretsmanager:GetSecretValue'
+            Resource:
+              - !Ref SecretsManagerSecretGoogleAppCreds
+              - !Ref SecretsManagerSecretPostgresCreds
+          - Effect: Allow
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+            Resource:
+              - !GetAtt ECRRepository.Arn
+      PolicyName: ocdtracker-api
+      Roles:
+        - !Ref IAMRoleOCDTrackerAPI
+
+  IAMPolicyGithubActions:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:CompleteLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:BatchCheckLayerAvailability'
+              - 'ecr:PutImage'
+            Resource: !GetAtt ECRRepository.Arn
+          - Effect: Allow
+            Action: 'ecr:GetAuthorizationToken'
+            Resource: '*'
+      PolicyName: github-actions
+      Roles:
+        - !Ref IAMRoleGithubActions
+
+  IAMOIDCProviderGithubActions:
+    Type: 'AWS::IAM::OIDCProvider'
+    Properties:
+      ClientIdList:
+        - sts.amazonaws.com
+      Tags:
+        - Key: Name
+          Value: ocdtracker-api
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+      Url: https://token.actions.githubusercontent.com
+
+  ECRRepository:
+    Type: 'AWS::ECR::Repository'
+    Properties:
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "remove untagged images",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 1
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      RepositoryName: ocdtracker-api

@@ -13,7 +13,6 @@ import (
 	"github.com/cecobask/ocdtracker-api/pkg/log"
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
-	_ "github.com/joho/godotenv/autoload"
 	"go.uber.org/zap"
 	"google.golang.org/api/option"
 	"net/http"

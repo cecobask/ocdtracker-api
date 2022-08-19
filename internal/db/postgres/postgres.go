@@ -64,7 +64,7 @@ func ConnectWithConfig(ctx context.Context, credentials Credentials, connectionC
 		}
 		err := db.Ping()
 		if err != nil {
-			logger.Debug("failed attempt to establish database connection", zap.Int("attempts", attempts), zap.Error(err))
+			logger.Warn("failed attempt to establish database connection", zap.Int("attempts", attempts), zap.Error(err))
 			time.Sleep(connectionConfig.RetryDelay)
 			continue
 		}
@@ -99,10 +99,11 @@ func Migrate(db *sql.DB) error {
 		return fmt.Errorf("failed to initialise database migrator: %w", err)
 	}
 	err = instance.Up()
-	if !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("failed to migrate database to latest version: %w", err)
+	if errors.Is(err, migrate.ErrNoChange) {
+		return nil
 	}
-	return nil
+	return fmt.Errorf("failed to migrate database to latest version: %w", err)
+
 }
 
 func logExec(ctx context.Context, db *sql.DB, query, action string, args ...interface{}) error {

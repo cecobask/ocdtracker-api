@@ -8,7 +8,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/aws/aws-sdk-go/service/secretsmanager/secretsmanageriface"
+	"github.com/cecobask/ocdtracker-api/pkg/log"
 	"golang.org/x/oauth2/google"
+	"time"
 )
 
 type SecretsManager struct {
@@ -39,8 +41,8 @@ type GoogleAppCredsSecret struct {
 }
 
 const (
-	secretNameGoogleAppCreds = "ocdtracker-google-app-creds"
-	secretNamePostgresCreds  = "ocdtracker-postgres-creds"
+	secretNameGoogleAppCreds = "google-app-creds"
+	secretNamePostgresCreds  = "postgres-creds"
 	defaultRegion            = "eu-west-1"
 )
 
@@ -62,10 +64,16 @@ func (sm *SecretsManager) GetGoogleAppCreds(ctx context.Context) (*google.Creden
 	if err != nil || secretString == nil {
 		return nil, fmt.Errorf("failed to get %s secret: %w", secretNameGoogleAppCreds, err)
 	}
+	if *secretString == "dummy" {
+		message := fmt.Sprintf("the %s secret has default value, retrying secret retrieval in 1m", secretNameGoogleAppCreds)
+		log.LoggerFromContext(ctx).Warn(message)
+		time.Sleep(time.Minute * 1)
+		_, _ = sm.GetGoogleAppCreds(ctx)
+	}
 	scopes := []string{"https://www.googleapis.com/auth/cloud-platform", "https://www.googleapis.com/auth/firebase"}
 	googleAppCreds, err := google.CredentialsFromJSON(ctx, []byte(*secretString), scopes...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build google application credentials from json")
+		return nil, fmt.Errorf("failed to build google application credentials from json: %w", err)
 	}
 	return googleAppCreds, nil
 }
