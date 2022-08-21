@@ -4,7 +4,9 @@ services:
     restart: on-failure
     build:
       context: .
-      dockerfile: ${DOCKERFILE:-Dockerfile}
+      dockerfile: Dockerfile-dev
+    env_file:
+      - .env
     ports:
       - "8080:8080"
       - "40000:40000"

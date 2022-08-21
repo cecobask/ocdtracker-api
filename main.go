@@ -21,10 +21,8 @@ import (
 func main() {
 	logger := log.NewLogger()
 	ctx := log.ContextWithLogger(context.Background(), logger)
-
 	sess := session.Must(session.NewSession())
 	secretsManager := aws.NewSecretsManager(sess)
-
 	postgresCreds, err := secretsManager.GetPostgresCreds()
 	if err != nil {
 		logger.Fatal("failed to get postgres credentials", zap.Error(err))
@@ -42,7 +40,6 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to migrate database", zap.Error(err))
 	}
-
 	googleAppCreds, err := secretsManager.GetGoogleAppCreds(ctx)
 	if err != nil {
 		logger.Fatal("failed to get google application credentials", zap.Error(err))
@@ -56,12 +53,10 @@ func main() {
 	if err != nil {
 		logger.Fatal("unable to create firebase auth client", zap.Error(err))
 	}
-
 	accountRepo := postgres.NewAccountRepository(db)
 	ocdLogRepo := postgres.NewOCDLogRepository(db)
 	accountHandler := account.NewHandler(ctx, accountRepo, authClient)
 	ocdLogHandler := ocdlog.NewHandler(ctx, ocdLogRepo)
-
 	chiRouter := chi.NewRouter()
 	chiRouter.Use(
 		chiMiddleware.Recoverer,
