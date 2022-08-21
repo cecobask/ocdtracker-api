@@ -1,16 +1,12 @@
 package aws
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/aws/aws-sdk-go/service/secretsmanager/secretsmanageriface"
-	"github.com/cecobask/ocdtracker-api/pkg/log"
-	"golang.org/x/oauth2/google"
-	"time"
 )
 
 type SecretsManager struct {
@@ -27,23 +23,9 @@ type PostgresCredsSecret struct {
 	DBInstanceIdentifier string `json:"dbInstanceIdentifier"`
 }
 
-type GoogleAppCredsSecret struct {
-	Type                    string `json:"type"`
-	ProjectId               string `json:"project_id"`
-	PrivateKeyId            string `json:"private_key_id"`
-	PrivateKey              string `json:"private_key"`
-	ClientEmail             string `json:"client_email"`
-	ClientId                string `json:"client_id"`
-	AuthUri                 string `json:"auth_uri"`
-	TokenUri                string `json:"token_uri"`
-	AuthProviderX509CertUrl string `json:"auth_provider_x509_cert_url"`
-	ClientX509CertUrl       string `json:"client_x509_cert_url"`
-}
-
 const (
-	secretNameGoogleAppCreds = "google-app-creds"
-	secretNamePostgresCreds  = "postgres-creds"
-	defaultRegion            = "eu-west-1"
+	secretNamePostgresCreds = "postgres-creds"
+	defaultRegion           = "eu-west-1"
 )
 
 func NewSecretsManager(sess *session.Session) *SecretsManager {
@@ -57,25 +39,6 @@ func (sm *SecretsManager) getSecret(secretName string) (*string, error) {
 		return nil, fmt.Errorf("failed to get secret value: %w", err)
 	}
 	return secretOutput.SecretString, nil
-}
-
-func (sm *SecretsManager) GetGoogleAppCreds(ctx context.Context) (*google.Credentials, error) {
-	secretString, err := sm.getSecret(secretNameGoogleAppCreds)
-	if err != nil || secretString == nil {
-		return nil, fmt.Errorf("failed to get %s secret: %w", secretNameGoogleAppCreds, err)
-	}
-	if *secretString == "dummy" {
-		message := fmt.Sprintf("the %s secret has default value, retrying secret retrieval in 1m", secretNameGoogleAppCreds)
-		log.LoggerFromContext(ctx).Warn(message)
-		time.Sleep(time.Minute * 1)
-		_, _ = sm.GetGoogleAppCreds(ctx)
-	}
-	scopes := []string{"https://www.googleapis.com/auth/cloud-platform", "https://www.googleapis.com/auth/firebase"}
-	googleAppCreds, err := google.CredentialsFromJSON(ctx, []byte(*secretString), scopes...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build google application credentials from json: %w", err)
-	}
-	return googleAppCreds, nil
 }
 
 func (sm *SecretsManager) GetPostgresCreds() (*PostgresCredsSecret, error) {

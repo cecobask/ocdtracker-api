@@ -260,15 +260,6 @@ Resources:
         - Key: Name
           Value: ocdtracker-api
 
-  SecretsManagerSecretGoogleAppCreds:
-    Type: 'AWS::SecretsManager::Secret'
-    Properties:
-      Name: google-app-creds
-      SecretString: dummy
-      Tags:
-        - Key: Name
-          Value: ocdtracker-api
-
   SecretsManagerSecretPostgresCreds:
     Type: 'AWS::SecretsManager::Secret'
     Properties:
@@ -296,7 +287,6 @@ Resources:
             Action:
               - 'secretsmanager:GetSecretValue'
             Resource:
-              - !Ref SecretsManagerSecretGoogleAppCreds
               - !Ref SecretsManagerSecretPostgresCreds
           - Effect: Allow
             Action:
@@ -304,6 +294,11 @@ Resources:
               - 'ecr:BatchGetImage'
             Resource:
               - !GetAtt ECRRepository.Arn
+          - Effect: Allow
+            Action:
+              - 's3:GetObject'
+            Resource:
+              - 'arn:aws:s3:::ocdtracker-api/google-app-creds.json'
       PolicyName: ocdtracker-api
       Roles:
         - !Ref IAMRoleOCDTrackerAPI

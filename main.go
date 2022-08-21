@@ -22,8 +22,7 @@ func main() {
 	logger := log.NewLogger()
 	ctx := log.ContextWithLogger(context.Background(), logger)
 	sess := session.Must(session.NewSession())
-	secretsManager := aws.NewSecretsManager(sess)
-	postgresCreds, err := secretsManager.GetPostgresCreds()
+	postgresCreds, err := aws.NewSecretsManager(sess).GetPostgresCreds()
 	if err != nil {
 		logger.Fatal("failed to get postgres credentials", zap.Error(err))
 	}
@@ -40,7 +39,7 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to migrate database", zap.Error(err))
 	}
-	googleAppCreds, err := secretsManager.GetGoogleAppCreds(ctx)
+	googleAppCreds, err := aws.NewS3(sess).GetGoogleAppCreds(ctx)
 	if err != nil {
 		logger.Fatal("failed to get google application credentials", zap.Error(err))
 	}
