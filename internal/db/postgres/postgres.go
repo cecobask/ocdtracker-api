@@ -99,11 +99,10 @@ func Migrate(db *sql.DB) error {
 		return fmt.Errorf("failed to initialise database migrator: %w", err)
 	}
 	err = instance.Up()
-	if errors.Is(err, migrate.ErrNoChange) {
-		return nil
+	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("failed to migrate database to latest version: %w", err)
 	}
-	return fmt.Errorf("failed to migrate database to latest version: %w", err)
-
+	return nil
 }
 
 func logExec(ctx context.Context, db *sql.DB, query, action string, args ...interface{}) error {

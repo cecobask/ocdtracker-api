@@ -146,7 +146,7 @@ Resources:
       DeleteAutomatedBackups: true
       Engine: postgres
       EngineVersion: 14.4
-      MasterUsername: !Sub '{{resolve:secretsmanager:${  SecretsManagerSecretPostgresCreds}::username}}'
+      MasterUsername: !Sub '{{resolve:secretsmanager:${SecretsManagerSecretPostgresCreds}::username}}'
       MasterUserPassword: !Sub '{{resolve:secretsmanager:${SecretsManagerSecretPostgresCreds}::password}}'
       MaxAllocatedStorage: 25
       PreferredBackupWindow: '23:03-23:33'
