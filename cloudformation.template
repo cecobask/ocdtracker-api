@@ -211,6 +211,7 @@ Resources:
             cd ocdtracker-api
             git clone https://github.com/cecobask/ocdtracker-api.git .
             docker build -t $IMAGE .
+            docker push $IMAGE
           fi
           docker run --name ocdtracker-api -d -p 8080:8080 $IMAGE
 
@@ -290,8 +291,13 @@ Resources:
               - !Ref SecretsManagerSecretPostgresCreds
           - Effect: Allow
             Action:
-              - 'ecr:GetDownloadUrlForLayer'
               - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+              - 'ecr:CompleteLayerUpload'
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:PutImage'
+              - 'ecr:UploadLayerPart'
             Resource:
               - !GetAtt ECRRepository.Arn
           - Effect: Allow
