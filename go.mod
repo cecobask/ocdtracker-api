@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	firebase.google.com/go/v4 v4.8.0
-	github.com/aws/aws-sdk-go v1.17.7
+	github.com/aws/aws-sdk-go v1.33.0
 	github.com/georgysavva/scany v1.1.0
 	github.com/go-chi/chi/v5 v5.0.7
 	github.com/go-chi/render v1.0.1
